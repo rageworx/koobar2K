@@ -1,0 +1,3 @@
+copy these libraries here:
+- libfl_imgtk.a
+- libmpg123.a
