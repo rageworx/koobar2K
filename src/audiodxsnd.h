@@ -44,6 +44,7 @@ class AudioDXSound : public AudioOut
         ControlType _newctrlstate;
         ControlType _ctrlstate;
         unsigned    _currentbufferque;
+        unsigned    _prevbufferque;
         void*       _dxbuff[2];
         int         _dxbidx_w;
         int         _dxbidx_r;

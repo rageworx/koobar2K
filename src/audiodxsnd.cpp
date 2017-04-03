@@ -34,12 +34,20 @@ static HANDLE               hEventBuffer;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+typedef enum
+{
+    NOTBUFFERED         = 0,
+    BUFFERED,
+    PLAYING,
+    PLAYED
+}bufferstatus;
+
 typedef struct
 {
     unsigned                position;
     unsigned                size;
     IDirectSoundBuffer*     pdxbuffer;
-    bool                    played;
+    bufferstatus            status;
     bool                    endofbuffer;
 }DXBufferState;
 
@@ -101,6 +109,7 @@ AudioOut::AResult AudioDXSound::InitAudio( unsigned chl, unsigned freq )
 
         _buffer.clear();
         _buffer.reserve( DEF_ADXS_RESERVE_BUFF_SZ );
+        _prevbufferque = 0;
 
         hEventBuffer = CreateEvent( NULL, TRUE, FALSE, NULL );
 
@@ -127,6 +136,24 @@ AudioOut::AResult AudioDXSound::FinalAudio()
         pthread_join( _ptt, NULL );
 
         procStop();
+
+        for( unsigned cnt=0; cnt<2; cnt++ )
+        {
+            DXBufferState* remdxb = (DXBufferState*)_dxbuff[ cnt ];
+
+            if ( remdxb != NULL )
+            {
+                if ( remdxb->pdxbuffer != NULL )
+                {
+                    remdxb->pdxbuffer->Stop();
+                    remdxb->pdxbuffer->Release();
+                }
+            }
+
+            delete remdxb;
+
+            _dxbuff[ cnt ] = NULL;
+        }
 
         SafeRelease( &pDSnd );
         _inited = false;
@@ -212,6 +239,7 @@ AudioOut::AResult AudioDXSound::Control( ControlType ct, unsigned p1, unsigned p
                     if ( procPlay() == true )
                     {
                         _ctrlstate = _newctrlstate;
+                        _prevbufferque = 0;
                     }
                 }
                 break;
@@ -219,7 +247,6 @@ AudioOut::AResult AudioDXSound::Control( ControlType ct, unsigned p1, unsigned p
             case STOP:
                 {
                     procStop();
-                    ClearBuffer();
 
                     _ctrlstate = _newctrlstate;
                 }
@@ -267,13 +294,27 @@ void* AudioDXSound::ThreadCall()
                 DXBufferState* pdxb = (DXBufferState*)_dxbuff[ _dxbidx_r ];
                 if ( pdxb != NULL )
                 {
-                    if ( pdxb->played  == false )
+                    if ( pdxb->status == BUFFERED )
                     {
-                        printf( "Continued play _dxbidx_r = %d ( pos = %d)\n",
-                                _dxbidx_r,
-                                pdxb->position );
-                        pdxb->pdxbuffer->Play( 0, 0, 0 );
-                        pdxb->played = true;
+                        if ( ( _prevbufferque < pdxb->position ) &&
+                             ( pdxb->position < _buffer.size() ) )
+                        {
+#ifdef DEBUG
+                            printf( "Continued play _dxbidx_r = %d ( pos = %d / %d )\n",
+                                    _dxbidx_r,
+                                    pdxb->position,
+                                    _buffer.size() );
+#endif // DEBUG
+                            pdxb->pdxbuffer->Play( 0, 0, 0 );
+                            pdxb->status = PLAYING;
+
+                            _prevbufferque = pdxb->position;
+                        }
+                        else
+                        {
+                            pdxb->status = PLAYED;
+                            islastend = true;
+                        }
                     }
                 }
 
@@ -282,10 +323,13 @@ void* AudioDXSound::ThreadCall()
                     // Make Volume to Zero for removing popping noise !
                     beremoved->pdxbuffer->SetVolume( 0 );
                     beremoved->pdxbuffer->Stop();
+                    beremoved->status = PLAYED;
 
                     if ( beremoved->endofbuffer == false )
                     {
                         // Generate next buffer.
+
+                        // Check again ?
                         createNextBuffer();
                     }
                     else
@@ -375,7 +419,7 @@ bool AudioDXSound::createNextBuffer( bool flushleft )
                 dxbs->position  = _currentbufferque;
                 dxbs->size      = buffsz;
                 dxbs->pdxbuffer = newdxsb;
-                dxbs->played    = false;
+                dxbs->status    = BUFFERED;
                 dxbs->endofbuffer = islastbuff;
 
                 _dxbuff[ _dxbidx_w ] = (void*)dxbs;
@@ -409,10 +453,10 @@ bool AudioDXSound::createNextBuffer( bool flushleft )
 
         DXBufferState* dxbs = (DXBufferState* )_dxbuff[ _dxbidx_w ];
 
-        if ( dxbs->played == false )
+        if ( ( dxbs->status == BUFFERED ) || ( dxbs->status == PLAYING ) )
             return false;
 
-        if ( ( _currentbufferque + buffsz ) > curbuffsz )
+        if ( ( _currentbufferque + buffsz ) >= curbuffsz )
         {
             buffsz = curbuffsz - _currentbufferque;
             islastbuff = true;
@@ -421,11 +465,19 @@ bool AudioDXSound::createNextBuffer( bool flushleft )
         DSBUFFERDESC tmpDESC;
         IDirectSoundBuffer* dxsb = dxbs->pdxbuffer;
 
+        if ( buffsz == 0 )
+        {
+            dxbs->status = NOTBUFFERED;
+            return false;
+        }
+
         bool retb = FillDSound( dxsb, &refbuff[ _currentbufferque ],
                                 _channels, _frequency, buffsz, tmpDESC );
         if ( retb == false )
         {
+#ifdef DEBUG
             printf( "Error: Fill buffer failed.\n" );
+#endif // DEBUG
             return false;
         }
 
@@ -437,9 +489,9 @@ bool AudioDXSound::createNextBuffer( bool flushleft )
             _dxbidx_w = 0;
         }
 
-        dxbs->played = false;
+        dxbs->status   = BUFFERED;
         dxbs->position = _currentbufferque;
-        dxbs->size = buffsz;
+        dxbs->size     = buffsz;
         dxbs->endofbuffer = islastbuff;
 
         if ( _event != NULL )
@@ -459,16 +511,21 @@ bool AudioDXSound::procPlay()
     {
         if ( ( _dxbuff[0] != NULL ) && ( _dxbuff[1] != NULL ) )
         {
-            DXBufferState* pdxb = (DXBufferState*)_dxbuff[ 0 ];
+            DXBufferState* pdxbs[2] = { (DXBufferState*)_dxbuff[0],
+                                        (DXBufferState*)_dxbuff[1] };
 
-            if ( pdxb != NULL )
+            if ( ( pdxbs[0]->status == BUFFERED ) &&
+                 ( pdxbs[1]->status == BUFFERED ) )
             {
-                pdxb->pdxbuffer->Play( 0, 0, 0 );
-                pdxb->played = true;
+                if ( pdxbs[0] != NULL )
+                {
+                    pdxbs[0]->pdxbuffer->Play( 0, 0, 0 );
+                    pdxbs[0]->status = PLAYED;
 
-                _played = true;
+                    _played = true;
 
-                return true;
+                    return true;
+                }
             }
         }
     }
@@ -480,20 +537,21 @@ void AudioDXSound::procStop()
 {
     for( unsigned cnt=0; cnt<2; cnt++ )
     {
-        DXBufferState* remdxb = (DXBufferState*)_dxbuff[ cnt ];
+        DXBufferState* pdxb = (DXBufferState*)_dxbuff[ cnt ];
 
-        if ( remdxb != NULL )
+        if ( pdxb != NULL )
         {
-            if ( remdxb->pdxbuffer != NULL )
+            if ( pdxb->status == PLAYING )
             {
-                remdxb->pdxbuffer->Stop();
-                remdxb->pdxbuffer->Release();
+                if ( pdxb->pdxbuffer != NULL )
+                {
+                    pdxb->pdxbuffer->Stop();
+                }
             }
+
+            pdxb->status   = NOTBUFFERED;
+            pdxb->position = 0;
         }
-
-        delete remdxb;
-
-        _dxbuff[ cnt ] = NULL;
     }
 
     _dxbidx_w = -1;
