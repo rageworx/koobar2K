@@ -457,7 +457,7 @@ void wMain::loadTags()
     char tmpmap[80] = {0};
     char* chstr[] = { "no channel", "mono", "stereo", "multi channels"};
 
-    sprintf( tmpmap, "%s - %.1fKHz - %d",
+    sprintf( tmpmap, "%s - %.1fKHz - type.%d",
              chstr[ mp3dec->Channels() ],
              (float)mp3dec->FrameRate() / (float)1000,
              mp3dec->Encoding() );

@@ -125,6 +125,8 @@ bool MPG123Wrap::Open( const char* path )
 
         mpg123_getformat( mh, &fmt_rate, &fmt_channels, &fmt_encoding );
 
+        fmt_encoding = MPG123_SAMPLESIZE( fmt_encoding );
+
         unsigned prevs = mpg123_tell( mh );
 
         mpg123_seek( mh, 0, SEEK_SET );
