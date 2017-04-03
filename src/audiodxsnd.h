@@ -9,7 +9,7 @@
 class AudioDXSound : public AudioOut
 {
     public:
-        AudioDXSound( HWND hParent );
+        AudioDXSound( HWND hParent, AudioOutEvent* e = NULL );
         ~AudioDXSound();
 
     public:
@@ -19,17 +19,19 @@ class AudioDXSound : public AudioOut
 
     public:
         AResult WriteBuffer( const unsigned char* buffer, unsigned sz );
+        AResult FlushBuffer();
         AResult ClearBuffer();
 
     public:
         AResult Control( ControlType ct, unsigned p1, unsigned p2 );
+        unsigned BufferPosition();
         ControlType ControlState() { return _ctrlstate; }
 
     public:
         void* ThreadCall();
 
     protected:
-        bool createNextBuffer();
+        bool createNextBuffer( bool flushleft = false );
         bool procPlay();
         void procStop();
 

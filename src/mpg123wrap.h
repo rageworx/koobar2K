@@ -20,6 +20,11 @@ class MPG123Wrap
     public:
         bool GetTag( const char* scheme, unsigned char* &result, unsigned* tagsz );
 
+    public:
+        long FrameRate()    { return fmt_rate; }
+        int  Channels()     { return fmt_channels; }
+        int  Encoding()     { return fmt_encoding; }
+
     protected:
         const char* find_v2extras( const char* tname );
         bool find_v2imgage( char* &buffer, unsigned &buffersz );
@@ -31,19 +36,22 @@ class MPG123Wrap
         int             metainfo;
         off_t           framenum;
         off_t           frames_left;
-        long            output_propflags;
         bool            fresh;
         bool            intflag;
         int             skip_tracks;
-        int             OutputDescriptor;
 
         long            new_header;
-        size_t          minbytes = 0;
+        size_t          minbytes;
 
-        int             param_frame_number = 0;
-        int             param_frames_left = 0;
-        int             param_start_frame = 0;
-        int             param_checkrange = 1;
+        long            param_index_size;
+        int             param_frame_number;
+        int             param_frames_left;
+        int             param_start_frame;
+        int             param_checkrange;
+
+        long            fmt_rate;
+        int             fmt_channels;
+        int             fmt_encoding;
 
         mpg123_pars*    mp;
         mpg123_id3v1*   id3tv1;

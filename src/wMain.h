@@ -19,20 +19,24 @@
 #include "mpg123wrap.h"
 #include "audioout.h"
 
-class wMain
+class wMain : public AudioOutEvent
 {
     public:
         wMain( int argc, char** argv );
 
     public:
-        int     Run();
-        void*   PThreadCall();
-        void    WidgetCB( Fl_Widget* w );
-        void    MenuCB( Fl_Widget* w );
-        void    MoveCB( Fl_Widget* w );
+        int   Run();
+        void* PThreadCall();
+        void  WidgetCB( Fl_Widget* w );
+        void  MenuCB( Fl_Widget* w );
+        void  MoveCB( Fl_Widget* w );
 
     private:
         ~wMain();
+
+    protected:
+        void OnNewBuffer( unsigned position, unsigned nbsz, unsigned maxposition );
+        void OnBufferEnd();
 
     protected:
         void parseParams();
@@ -50,6 +54,7 @@ class wMain
         bool        _runsatfullscreen;
         bool        _keyprocessing;
         bool        _threadkillswitch;
+        bool        _firstthreadrun;
         pthread_t   _pt;
 
     protected:
@@ -60,6 +65,7 @@ class wMain
         Fl_Box*                 boxAlbum;
         Fl_Box*                 boxTitle;
         Fl_Box*                 boxMiscInfo;
+        Fl_Box*                 boxFileInfo;
         Fl_Group*               grpStatus;
         Fl_Group*               grpOverlay;
         Fl_Box*                 boxStatus;
@@ -73,6 +79,11 @@ class wMain
         std::string             strtag_title;
         std::string             strtag_album;
         std::string             strtag_moreinfo;
+        std::string             strtag_fileinfo;
+
+    protected:
+        std::vector< std::string >  mp3list;
+        unsigned                    mp3queue;
 };
 
 #endif /// of __WINMAIN_H__

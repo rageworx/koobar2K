@@ -18,16 +18,18 @@ using namespace std;
 ////////////////////////////////////////////////////////////////////////////////
 
 #define DEF_ADXS_RESERVE_BUFF_SZ        50 * 1024 * 1024
-#define DEF_ADXS_MIN_PLAYBUFF_SZ        256 * 1024
-#define DEF_ADXS_MIN_NEXT_SZ            256
+#define DEF_ADXS_MIN_PLAYBUFF_SZ        512 * 1024
+//#define DEF_ADXS_MIN_NEXT_SZ            384
+#define DEF_ADXS_MIN_NEXT_SZ            ( DEF_ADXS_MIN_PLAYBUFF_SZ / 2048 )
 
 #define TIME_PER_SAMPLE( _s_ )          ( 1.0f / (float)_s_ )
+
+#define DEBUG_SND_POSITION
 
 ////////////////////////////////////////////////////////////////////////////////
 
 static IDirectSound*        pDSnd = NULL;
 static IDirectSoundNotify*  pDsNotify = NULL;
-static DSBPOSITIONNOTIFY    PositionNotify;
 static HANDLE               hEventBuffer;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -35,6 +37,7 @@ static HANDLE               hEventBuffer;
 typedef struct
 {
     unsigned                position;
+    unsigned                size;
     IDirectSoundBuffer*     pdxbuffer;
     bool                    played;
     bool                    endofbuffer;
@@ -48,8 +51,9 @@ void* pthread_dxa_call( void* p );
 
 ////////////////////////////////////////////////////////////////////////////////
 
-AudioDXSound::AudioDXSound( HWND hParent )
- : _hParent( hParent ),
+AudioDXSound::AudioDXSound( HWND hParent, AudioOutEvent* e  )
+ : AudioOut::AudioOut( e ),
+   _hParent( hParent ),
    _inited( false ),
    _played( false ),
    _dxbidx_w( -1 ),
@@ -59,12 +63,8 @@ AudioDXSound::AudioDXSound( HWND hParent )
    _currentbufferque( 0 ),
    _threadkeeplived( true )
 {
-    _buffer.reserve( DEF_ADXS_RESERVE_BUFF_SZ );
-
     _dxbuff[0] = NULL;
     _dxbuff[1] = NULL;
-
-    int reti = pthread_create( &_ptt, NULL, pthread_dxa_call, this );
 }
 
 AudioDXSound::~AudioDXSound()
@@ -75,11 +75,6 @@ AudioDXSound::~AudioDXSound()
         {
             Control( STOP, 0, 0 );
         }
-
-        _threadkeeplived = false;
-
-        pthread_kill( _ptt, NULL );
-        pthread_join( _ptt, NULL );
 
         FinalAudio();
     }
@@ -104,7 +99,12 @@ AudioOut::AResult AudioDXSound::InitAudio( unsigned chl, unsigned freq )
         _channels  = chl;
         _frequency = freq;
 
+        _buffer.clear();
+        _buffer.reserve( DEF_ADXS_RESERVE_BUFF_SZ );
+
         hEventBuffer = CreateEvent( NULL, TRUE, FALSE, NULL );
+
+        int reti = pthread_create( &_ptt, NULL, pthread_dxa_call, this );
 
         return OK;
     }
@@ -121,13 +121,21 @@ AudioOut::AResult AudioDXSound::FinalAudio()
 {
     if ( _inited == true )
     {
+        _threadkeeplived = false;
+
+        //pthread_kill( _ptt, NULL );
+        pthread_join( _ptt, NULL );
+
+        procStop();
+
         SafeRelease( &pDSnd );
         _inited = false;
+
+        DeleteObject( hEventBuffer );
 
         return OK;
     }
 
-    DeleteObject( hEventBuffer );
 
     return FAIL;
 }
@@ -135,6 +143,11 @@ AudioOut::AResult AudioDXSound::FinalAudio()
 AudioOut::AResult AudioDXSound::ConfigAudio()
 {
     return FAIL;
+}
+
+unsigned AudioDXSound::BufferPosition()
+{
+    return _currentbufferque;
 }
 
 AudioOut::AResult AudioDXSound::WriteBuffer( const unsigned char* buffer, unsigned sz )
@@ -146,19 +159,32 @@ AudioOut::AResult AudioDXSound::WriteBuffer( const unsigned char* buffer, unsign
             _buffer.push_back( buffer[ cnt ] );
         }
 
-        if ( _currentbufferque < ( DEF_ADXS_MIN_PLAYBUFF_SZ * 2 ) )
+        if ( _currentbufferque == 0 )
         {
-            if ( _buffer.size() > ( DEF_ADXS_MIN_PLAYBUFF_SZ * 2 ) )
+            // Wait size filled in double buffered.
+            unsigned bsz = _buffer.size();
+            unsigned dsz = DEF_ADXS_MIN_PLAYBUFF_SZ * 2;
+            if ( bsz > dsz )
             {
-                // Make first double buffers..
                 createNextBuffer();
                 createNextBuffer();
+#ifdef DEBUG
+                printf( "buffer size = %d, cached.\n", bsz );
+#endif // DEBUG
             }
         }
 
         return OK;
     }
     return FAIL;
+}
+
+AudioOut::AResult AudioDXSound::FlushBuffer()
+{
+    if ( _currentbufferque < _buffer.size() )
+    {
+        createNextBuffer( true );
+    }
 }
 
 AudioOut::AResult AudioDXSound::ClearBuffer()
@@ -193,6 +219,7 @@ AudioOut::AResult AudioDXSound::Control( ControlType ct, unsigned p1, unsigned p
             case STOP:
                 {
                     procStop();
+                    ClearBuffer();
 
                     _ctrlstate = _newctrlstate;
                 }
@@ -220,7 +247,6 @@ void* AudioDXSound::ThreadCall()
             {
                 ResetEvent( hEventBuffer );
 
-
                 if ( _dxbidx_r < 0 )
                 {
                     _dxbidx_r = 0;
@@ -228,12 +254,17 @@ void* AudioDXSound::ThreadCall()
 
                 int remidx = _dxbidx_r;
                 bool islastend = false;
+                bool neednextbuff = false;
 
-                DXBufferState* pdxb = (DXBufferState*)_dxbuff[ _dxbidx_r ];
-                if ( pdxb != NULL )
+                DXBufferState* beremoved = (DXBufferState*)_dxbuff[ remidx ];
+                if ( beremoved != NULL )
                 {
-                    if ( pdxb->endofbuffer == false )
+                    // Make Volume to Zero for removing popping noise !
+                    beremoved->pdxbuffer->SetVolume( 0 );
+
+                    if ( beremoved->endofbuffer == false )
                     {
+                        // Generate next buffer.
                         createNextBuffer();
                     }
                     else
@@ -242,126 +273,147 @@ void* AudioDXSound::ThreadCall()
                     }
                 }
 
+                _dxbuff[ remidx ] = NULL;
+
+                // Switch buffer index.
                 _dxbidx_r++;
                 if ( _dxbidx_r > 1 )
                 {
                     _dxbidx_r = 0;
                 }
 
-                pdxb = (DXBufferState*)_dxbuff[ _dxbidx_r ];
+                DXBufferState* pdxb = (DXBufferState*)_dxbuff[ _dxbidx_r ];
                 if ( pdxb != NULL )
                 {
                     if ( pdxb->played  == false )
                     {
-                        pdxb->pdxbuffer->Play( 0, 0 , 0 );
+                        pdxb->pdxbuffer->Play( 0, 0, 0 );
                         pdxb->played = true;
                     }
                 }
 
-                pdxb = (DXBufferState*)_dxbuff[ remidx ];
-                if ( pdxb != NULL )
+                if ( beremoved != NULL )
                 {
-                    pdxb->pdxbuffer->Stop();
-                    pdxb->pdxbuffer->Release();
+                    beremoved->pdxbuffer->Lock( 0, 0, NULL, 0, NULL, 0, 0 );
+                    beremoved->pdxbuffer->Unlock( NULL, 0, NULL, 0 );
+                    beremoved->pdxbuffer->Release();
 
-                    delete pdxb;
-                    _dxbuff[ remidx ] = NULL;
+                    delete beremoved;
                 }
 
                 if ( islastend == true )
                 {
-                    Control( STOP, 0, 0 );
+                    if ( _event != NULL )
+                    {
+                        _event->OnBufferEnd();
+                    }
                 }
             }
         }
         else
         {
-            Sleep( 10 );
+            Sleep( 1 );
         }
     }
 }
 
-bool AudioDXSound::createNextBuffer()
+bool AudioDXSound::createNextBuffer( bool flushleft )
 {
     unsigned curbuffsz = _buffer.size();
 
-    if ( curbuffsz > DEF_ADXS_MIN_PLAYBUFF_SZ )
+    const char* refbuff = (const char*)_buffer.data();
+
+    if ( _dxbidx_w == -1 )
     {
-        const char* refbuff = (const char*)_buffer.data();
-
-        if ( _dxbidx_w == -1 )
-        {
-            _dxbidx_w = 0;
-        }
-
-        // Check prebuffer already exists...
-        if ( _dxbuff[ _dxbidx_w ] != NULL )
-            return false;
-
-        unsigned buffsz = DEF_ADXS_MIN_PLAYBUFF_SZ;
-        bool islastbuff = false;
-
-        if ( ( _currentbufferque + buffsz ) > curbuffsz )
-        {
-            buffsz = curbuffsz - _currentbufferque;
-            islastbuff = true;
-        }
-
-        DSBUFFERDESC tmpDESC;
-        IDirectSoundBuffer* newdxsb = NULL;
-        newdxsb = createDSBufferRaw( &refbuff[ _currentbufferque ],
-                                     _channels,
-                                     _frequency,
-                                     buffsz,
-                                     tmpDESC );
-        if ( newdxsb != NULL )
-        {
-            HRESULT hr = DS_OK;
-            hr = newdxsb->QueryInterface( IID_IDirectSoundNotify,
-                                          (void**)&pDsNotify );
-            if ( hr == DS_OK )
-            {
-                PositionNotify.dwOffset = buffsz - 1;
-                PositionNotify.hEventNotify = hEventBuffer;
-
-                pDsNotify->SetNotificationPositions( 1, &PositionNotify );
-            }
-            else
-            {
-                newdxsb->Release();
-                return false;
-            }
-
-            DXBufferState* dxbs = new DXBufferState;
-
-            if ( dxbs != NULL )
-            {
-                dxbs->position  = _currentbufferque;
-                dxbs->pdxbuffer = newdxsb;
-                dxbs->played    = false;
-                dxbs->endofbuffer = islastbuff;
-
-                _dxbuff[ _dxbidx_w ] = (void*)dxbs;
-
-                _currentbufferque += buffsz;
-                _dxbidx_w++;
-
-                if ( _dxbidx_w > 1 )
-                {
-                    _dxbidx_w = 0;
-                }
-            }
-            else
-            {
-                newdxsb->Release();
-                return false;
-            }
-
-
-            return true;
-        }
+        _dxbidx_w = 0;
     }
 
+    // Check prebuffer already exists...
+    if ( _dxbuff[ _dxbidx_w ] != NULL )
+        return false;
+
+    unsigned buffsz = DEF_ADXS_MIN_PLAYBUFF_SZ;
+    bool islastbuff = false;
+
+    if ( ( _currentbufferque + buffsz ) > curbuffsz )
+    {
+        buffsz = curbuffsz - _currentbufferque;
+        islastbuff = true;
+    }
+
+    DSBUFFERDESC tmpDESC;
+    IDirectSoundBuffer* newdxsb = NULL;
+    newdxsb = createDSBufferRaw( &refbuff[ _currentbufferque ],
+                                 _channels,
+                                 _frequency,
+                                 buffsz,
+                                 tmpDESC );
+    if ( newdxsb != NULL )
+    {
+        HRESULT hr = DS_OK;
+
+        DSBPOSITIONNOTIFY PositionNotify;
+
+        hr = newdxsb->QueryInterface( IID_IDirectSoundNotify,
+                                      (void**)&pDsNotify );
+        if ( hr == DS_OK )
+        {
+            DWORD offsz = buffsz - DEF_ADXS_MIN_NEXT_SZ;
+            if ( ( (long long)buffsz - DEF_ADXS_MIN_NEXT_SZ) < 0 )
+            {
+                offsz = buffsz;
+            }
+
+            PositionNotify.dwOffset = offsz;
+            PositionNotify.hEventNotify = hEventBuffer;
+
+            pDsNotify->SetNotificationPositions( 1, &PositionNotify );
+        }
+        else
+        {
+            newdxsb->Release();
+            return false;
+        }
+
+        DXBufferState* dxbs = new DXBufferState;
+
+        if ( dxbs != NULL )
+        {
+            dxbs->position  = _currentbufferque;
+            dxbs->size      = buffsz;
+            dxbs->pdxbuffer = newdxsb;
+            dxbs->played    = false;
+            dxbs->endofbuffer = islastbuff;
+
+            _dxbuff[ _dxbidx_w ] = (void*)dxbs;
+
+            _currentbufferque += buffsz;
+            _dxbidx_w++;
+
+            if ( _dxbidx_w > 1 )
+            {
+                _dxbidx_w = 0;
+            }
+        }
+        else
+        {
+            newdxsb->Release();
+            return false;
+        }
+
+        if ( _event != NULL )
+        {
+            _event->OnNewBuffer( _currentbufferque - buffsz, buffsz, curbuffsz );
+        }
+
+        return true;
+    }
+#ifdef DEBUG
+    else
+    {
+        printf(" createDSBufferRaw failed.\n" );
+    }
+#endif // DEBUG
     return false;
 }
 
@@ -396,10 +448,15 @@ void AudioDXSound::procStop()
 
         if ( remdxb != NULL )
         {
-            remdxb->pdxbuffer->Release();
+            if ( remdxb->pdxbuffer != NULL )
+            {
+                remdxb->pdxbuffer->Stop();
+                remdxb->pdxbuffer->Release();
+            }
         }
 
         delete remdxb;
+
         _dxbuff[ cnt ] = NULL;
     }
 
@@ -407,6 +464,16 @@ void AudioDXSound::procStop()
     _dxbidx_r = -1;
 
     _buffer.clear();
+    _buffer.resize(0);
+
+    _currentbufferque = 0;
+    _ctrlstate = NONE;
+
+    _played = false;
+
+#ifdef DEBUG
+    printf("void AudioDXSound::procStop() done.\n" );
+#endif // DEBUG
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -431,7 +498,8 @@ IDirectSoundBuffer* createDSBufferRaw( const char* ref, int chnls, int rate, int
 
     ZeroMemory( &dsdesc, sizeof( DSBUFFERDESC ) );
     dsdesc.dwSize = sizeof( DSBUFFERDESC );
-    dsdesc.dwFlags = DSBCAPS_STATIC | DSBCAPS_CTRLPOSITIONNOTIFY | DSBCAPS_GLOBALFOCUS;
+    //dsdesc.dwFlags = DSBCAPS_STATIC | DSBCAPS_CTRLPOSITIONNOTIFY | DSBCAPS_GLOBALFOCUS;
+    dsdesc.dwFlags = DSBCAPS_CTRLPOSITIONNOTIFY | DSBCAPS_CTRLVOLUME | DSBCAPS_GLOBALFOCUS;
     dsdesc.dwBufferBytes = size;
     dsdesc.lpwfxFormat = &wavfmt;
 
@@ -460,6 +528,9 @@ IDirectSoundBuffer* createDSBufferRaw( const char* ref, int chnls, int rate, int
         return newDSBuffer;
     }
 
+#ifdef DEBUG
+    printf("Error: Failed to create createDSBufferRaw();\n");
+#endif // DEBUG
     return NULL;
 }
 
@@ -468,46 +539,23 @@ bool FillDSound( IDirectSoundBuffer* &dsbuff, const char* ref, int chnls, int ra
     if ( pDSnd == NULL )
         return false;
 
-    WAVEFORMATEX wavfmt = {0};
+    void* pwData1 = NULL;
+    void* pwData2 = NULL;
+    DWORD lenData1 = 0;
+    DWORD lenData2 = 0;
 
-    wavfmt.cbSize = sizeof( WAVEFORMATEX );
-    wavfmt.wFormatTag = WAVE_FORMAT_PCM;
-    wavfmt.wBitsPerSample = 16;
-    wavfmt.nChannels = chnls;
-    wavfmt.nSamplesPerSec = rate;
-    wavfmt.nBlockAlign = wavfmt.nChannels * wavfmt.wBitsPerSample / 8;
-    wavfmt.nAvgBytesPerSec = wavfmt.nBlockAlign * wavfmt.nSamplesPerSec;
+    dsbuff->Lock( 0,
+                  dsdesc.dwBufferBytes,
+                  &pwData1,
+                  &lenData1,
+                  &pwData2,
+                  &lenData2,
+                  0 );
 
-    ZeroMemory( &dsdesc, sizeof( DSBUFFERDESC ) );
-    dsdesc.dwSize = sizeof( DSBUFFERDESC );
-    dsdesc.dwFlags = DSBCAPS_STATIC | DSBCAPS_CTRLPOSITIONNOTIFY;
-    dsdesc.dwBufferBytes = size;
-    dsdesc.lpwfxFormat = &wavfmt;
+    memcpy( pwData1, ref, dsdesc.dwBufferBytes );
+    dsbuff->Unlock( pwData1, dsdesc.dwBufferBytes, NULL, 0 );
 
-    HRESULT hr = pDSnd->CreateSoundBuffer( &dsdesc, &dsbuff, NULL );
-
-    if ( hr == S_OK )
-    {
-        void* pwData1 = NULL;
-        void* pwData2 = NULL;
-        DWORD lenData1 = 0;
-        DWORD lenData2 = 0;
-
-        dsbuff->Lock( 0,
-                      dsdesc.dwBufferBytes,
-                      &pwData1,
-                      &lenData1,
-                      &pwData2,
-                      &lenData2,
-                      0 );
-
-        memcpy( pwData1, ref, dsdesc.dwBufferBytes );
-        dsbuff->Unlock( pwData1, dsdesc.dwBufferBytes, NULL, 0 );
-
-        return true;
-    }
-
-    return false;
+    return true;
 }
 
 void* pthread_dxa_call( void* p )

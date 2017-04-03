@@ -89,10 +89,10 @@
 		<Unit filename="src/audiodxsnd.cpp" />
 		<Unit filename="src/audiodxsnd.h" />
 		<Unit filename="src/audioout.h" />
+		<Unit filename="src/dirsearch.cpp" />
+		<Unit filename="src/dirsearch.h" />
 		<Unit filename="src/fl/Fl_BorderlessWindow.H" />
 		<Unit filename="src/fl/Fl_BorderlessWindow.cpp" />
-		<Unit filename="src/fl/Fl_GroupAniSwitch.cpp" />
-		<Unit filename="src/fl/Fl_GroupAniSwitch.h" />
 		<Unit filename="src/main.cpp" />
 		<Unit filename="src/minGlue.h" />
 		<Unit filename="src/minIni.cpp" />

@@ -17,6 +17,7 @@
 
 #include "fl_imgtk.h"
 #include "audiodxsnd.h"
+#include "dirsearch.h"
 
 #include "themes.h"
 #include "resource.h"
@@ -48,6 +49,7 @@ wMain::wMain( int argc, char** argv )
    _argv( argv ),
    _runsatfullscreen( false ),
    _keyprocessing( false ),
+   _firstthreadrun( true ),
    testswitch( NULL ),
    winbgimg( NULL ),
    aout( NULL )
@@ -90,45 +92,83 @@ wMain::wMain( int argc, char** argv )
     {
         mainWindow->enlarge();
     }
+
+    // Init audio.
+    HWND hParent = fl_xid( mainWindow );
+
+    aout = new AudioDXSound( hParent, this );
+
+    if ( aout != NULL )
+    {
+        aout->InitAudio( 2, 44100 );
+    }
 }
 
 wMain::~wMain()
 {
+    if ( aout != NULL )
+    {
+        aout->Control( AudioOut::STOP, 0, 0 );
+        aout->FinalAudio();
+
+        delete aout;
+    }
 }
 
 int wMain::Run()
 {
     _threadkillswitch = false;
 
-    int ret = pthread_create( &_pt, NULL, pthread_work, this );
+    // Wait for window has a handle ...
+
+    DirSearch* dsearch = new DirSearch( "./test", ".mp3" );
+    if ( dsearch != NULL )
+    {
+        vector< string >* plist = dsearch->data();
+        if ( plist->size() > 0 )
+        {
+            for( unsigned cnt=0; cnt<plist->size(); cnt++ )
+            {
+                mp3list.push_back( plist->at( cnt ) );
+            }
+        }
+
+        delete dsearch;
+
+        mp3queue = GetTickCount() % mp3list.size();
+
+        int ret = pthread_create( &_pt, NULL, pthread_work, this );
+    }
 
     return Fl::run();
 }
 
 void* wMain::PThreadCall()
 {
-    // Wait for window has a handle ...
-
-    HWND hParent = fl_xid( mainWindow );
-
-     // Init audio.
-    aout = new AudioDXSound( hParent );
-
     if ( aout == NULL )
         return NULL;
+
+    if ( _firstthreadrun == true )
+    {
+        _firstthreadrun = false;
+        Sleep( 1000 );
+    }
 
     mp3dec = new MPG123Wrap();
 
     if ( mp3dec == NULL )
         return NULL;
 
-    if ( mp3dec->Open( "test.mp3" ) == false )
+    const char* mp3fn = mp3list[ mp3queue ].c_str();
+
+    printf("MP3 : %s\n", mp3fn );
+
+    if ( mp3dec->Open( mp3fn ) == false )
     {
         delete aout;
         return NULL;
     }
 
-    aout->InitAudio( 2, 44100 );
     bool bPlayed = false;
 
     loadTags();
@@ -171,16 +211,6 @@ void* wMain::PThreadCall()
         }
     }
 
-    if ( aout != NULL )
-    {
-        aout->Control( AudioOut::STOP, 0, 0 );
-        aout->FinalAudio();
-
-        delete( aout );
-    }
-
-    _pt = NULL;
-
     return NULL;
 }
 
@@ -211,7 +241,7 @@ void wMain::createComponents()
         winbgimg = fl_imgtk::makegradation_h( DEF_APP_DEFAULT_W, DEF_APP_DEFAULT_H,
                                               0xCCCCCC00, 0x99999900, true );
 
-        mainWindow->bgimage( winbgimg, true );
+        mainWindow->bgimage( winbgimg, FL_ALIGN_CENTER );
         mainWindow->setcleartype( true );
 
         grpViewer = new Fl_Group( cli_x, cli_y , cli_w, cli_h - 20 );
@@ -269,6 +299,16 @@ void wMain::createComponents()
             boxMiscInfo->label( "No more information" );
             boxMiscInfo->labelcolor( 0x33333300 );
             boxMiscInfo->labelsize( 12 );
+        }
+
+        cli_y += 20;
+
+        boxFileInfo = new Fl_Box( cli_x + 10 , cli_y, test_w, 20 );
+        if ( boxFileInfo != NULL )
+        {
+            boxFileInfo->label( "No file information" );
+            boxFileInfo->labelcolor( 0x33333300 );
+            boxFileInfo->labelsize( 12 );
         }
 
         cli_y += 20;
@@ -412,9 +452,22 @@ void wMain::loadTags()
         free( tmpstr );
     }
 
+    strtag_fileinfo.clear();
+
+    char tmpmap[80] = {0};
+    char* chstr[] = { "no channel", "mono", "stereo", "multi channels"};
+
+    sprintf( tmpmap, "%s - %.1fKHz - %d",
+             chstr[ mp3dec->Channels() ],
+             (float)mp3dec->FrameRate() / (float)1000,
+             mp3dec->Encoding() );
+
+    strtag_fileinfo = tmpmap;
+
     boxAlbum->label( strtag_album.c_str() );
     boxArtist->label( strtag_artist.c_str() );
     boxMiscInfo->label( strtag_moreinfo.c_str() );
+    boxFileInfo->label( strtag_fileinfo.c_str() );
 }
 
 void wMain::loadArtCover()
@@ -457,20 +510,24 @@ void wMain::loadArtCover()
                                                    test_w, test_h,
                                                    fl_imgtk::BILINEAR );
 
+        // Change background image with cover art.
         mainWindow->bgimage( NULL );
 
         fl_imgtk::discard_user_rgb_image( winbgimg );
 
+        // Get Maximum size
+        unsigned maxwh = max( mainWindow->w(), mainWindow->h() );
+
         winbgimg = fl_imgtk::rescale( (Fl_RGB_Image*)coverimg,
-                                      mainWindow->w(), mainWindow->h(),
-                                      fl_imgtk::BILINEAR );
+                                      maxwh, maxwh,
+                                      fl_imgtk::NONE );
 
         if ( winbgimg != NULL )
         {
             fl_imgtk::blurredimage_ex( winbgimg, 10 );
             fl_imgtk::brightbess_ex( winbgimg, -80.f );
 
-            mainWindow->bgimage( winbgimg, true );
+            mainWindow->bgimage( winbgimg, FL_ALIGN_CENTER );
 
             uchar avril = 0xFF - image_color_illum( winbgimg );
             Fl_Color newcol = 0;
@@ -491,6 +548,7 @@ void wMain::loadArtCover()
             boxAlbum->labelcolor( newcol );
             boxTitle->labelcolor( newcol );
             boxMiscInfo->labelcolor( newcol );
+            boxFileInfo->labelcolor( newcol );
 
             mainWindow->redraw();
         }
@@ -584,10 +642,6 @@ void wMain::WidgetCB( Fl_Widget* w )
                 //pthread_kill( _pt, 0 );
                 pthread_join( _pt, 0 );
                 printf("Ok.\n");
-
-                #ifdef DEBUG
-                system( "pause" );
-                #endif // DEBUG
             }
 
             mainWindow->hide();
@@ -602,6 +656,47 @@ void wMain::WidgetCB( Fl_Widget* w )
 void wMain::MoveCB( Fl_Widget* w )
 {
 }
+
+void wMain::OnNewBuffer( unsigned position, unsigned nbsz, unsigned maxposition )
+{
+    //printf("audio new buffer at %d + %d bytes \n", position, nbsz );
+}
+
+void wMain::OnBufferEnd()
+{
+    if ( mp3dec != NULL )
+    {
+        mp3dec->Close();
+    }
+
+    if ( aout != NULL )
+    {
+        aout->Control( AudioOut::STOP, 0, 0 );
+    }
+
+    //printf("audio buffer finished.\n");
+    if ( ( _pt != NULL ) && ( _threadkillswitch == false ) )
+    {
+        _threadkillswitch = true;
+        //pthread_kill( _pt, 0 );
+        pthread_join( _pt, 0 );
+        _pt = NULL;
+    }
+
+    if ( mp3list.size() > 0 )
+    {
+        mp3queue++;
+        if ( mp3queue >= mp3list.size() )
+        {
+            mp3queue = 0;
+        }
+
+        _threadkillswitch = false;
+
+        int ret = pthread_create( &_pt, NULL, pthread_work, this );
+    }
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////

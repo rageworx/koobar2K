@@ -325,6 +325,7 @@ Fl_BorderlessWindow::Fl_BorderlessWindow( int W, int H, const char* T )
    min_h( 0 ),
    max_w( 0 ),
    max_h( 0 ),
+   realshown( 0 ),
    backgroundimg( NULL ),
    convtitleiconimg( NULL ),
    backgroundimgcached( NULL )
@@ -485,22 +486,40 @@ void Fl_BorderlessWindow::size_range(int minw, int minh, int maxw, int maxh)
 
 void Fl_BorderlessWindow::draw()
 {
-    if ( backgroundfitting == false )
-    {
-        if ( backgroundimg != NULL )
-        {
-            backgroundimg->draw(0,0);
-        }
-    }
-    else
+    Fl_Image* drawimg = backgroundimg;
+
     if ( backgroundimgcached != NULL )
     {
-        backgroundimgcached->draw( 0, 0 );
+        drawimg = backgroundimgcached;
     }
-    else
-    if ( backgroundimg != NULL )
+
+    if ( drawimg != NULL )
     {
-        backgroundimg->draw(0,0);
+        int putx = 0;
+        int puty = 0;
+
+        switch( backgroundfitting )
+        {
+            case FL_ALIGN_BOTTOM_LEFT:
+                puty = drawimg->h() - h();
+                break;
+
+            case FL_ALIGN_RIGHT:
+                putx = drawimg->w() - h();
+                break;
+
+            case FL_ALIGN_RIGHT_BOTTOM:
+                putx = drawimg->w() - h();
+                puty = drawimg->h() - h();
+                break;
+
+            case FL_ALIGN_CENTER:
+                putx = ( w() - drawimg->w() ) / 2 ;
+                puty = ( h() - drawimg->h() ) / 2 ;
+                break;
+        }
+
+        drawimg->draw( putx, puty );
     }
 
     Fl_Double_Window::draw();
@@ -545,7 +564,7 @@ void Fl_BorderlessWindow::titleicon( Fl_Image* i )
     }
 }
 
-void Fl_BorderlessWindow::bgimage( Fl_Image* i, bool fitting )
+void Fl_BorderlessWindow::bgimage( Fl_Image* i, Fl_Align fitting )
 {
     backgroundimg = i;
     backgroundfitting = fitting;
@@ -694,10 +713,10 @@ int Fl_BorderlessWindow::handle( int e )
             }
             break;
 
-#ifdef _WIN32
         // A Fake way for FLTK,
         case FL_SHOW:
             {
+#ifdef _WIN32
                 HWND hWindow = fl_xid( this );
                 if ( hWindow != NULL )
                 {
@@ -725,9 +744,10 @@ int Fl_BorderlessWindow::handle( int e )
 
                     ShowWindow( hWindow, SW_SHOW );
                 }
+#endif // _WIN32
+                realshown = 1;
             }
             break;
-#endif // _WIN32
 
     }
 
@@ -758,8 +778,31 @@ void Fl_BorderlessWindow::regenbgcache( int w, int h )
             fl_imgtk::discard_user_rgb_image( backgroundimgcached );
         }
 
+        float rsratio = 1.0f;
+
+        if ( h > w )
+        {
+            rsratio = (float)h / (float)backgroundimg->h();
+        }
+        else
+        {
+            rsratio = (float)w / (float)backgroundimg->w();
+        }
+
+        unsigned newsz_w = (unsigned)( (float)backgroundimg->w() * rsratio );
+        unsigned newsz_h = (unsigned)( (float)backgroundimg->h() * rsratio );
+
+        if ( newsz_w < w )
+            newsz_w = w;
+
+        if ( newsz_h < h )
+            newsz_h = h;
+
+        printf( "Fl_BorderlessWindow::regenbgcache() new w x h = %d x %d\n",
+                newsz_w, newsz_h );
+
         backgroundimgcached = fl_imgtk::rescale( (Fl_RGB_Image*)backgroundimg,
-                                                 w, h,
+                                                 newsz_w, newsz_h,
                                                  fl_imgtk::BILINEAR );
     }
 }

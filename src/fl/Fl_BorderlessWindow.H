@@ -74,7 +74,7 @@ class Fl_BorderlessWindow : public Fl_Double_Window
         void setsinglewindow( int stype = 0 );
         void setcleartype( bool b );
         void titleicon( Fl_Image* i );
-        void bgimage( Fl_Image* i, bool fitting = false );
+        void bgimage( Fl_Image* i, Fl_Align fitting = FL_ALIGN_LEFT_TOP );
 #ifdef _WIN32
         void titleicon( HICON i );
 #endif // _WIN32
@@ -99,6 +99,7 @@ class Fl_BorderlessWindow : public Fl_Double_Window
         void procdblclktitle();
         void procwindowmove( int x, int y )  { if ( maximized_wh == false ) position( x, y ); }
         void callback_onmove( Fl_Callback* cb, void* p ) { cbOnMove = cb; pdOnMove = p; }
+        int  shown() { return realshown; }
 
     protected:
         int  sizegriptest( int x, int y );
@@ -125,6 +126,7 @@ class Fl_BorderlessWindow : public Fl_Double_Window
         int     min_h;
         int     max_w;
         int     max_h;
+        int     realshown;
 
     private:
         Fl_Boxtype                  defaultboxtype;
@@ -135,7 +137,7 @@ class Fl_BorderlessWindow : public Fl_Double_Window
         Fl_RGB_Image*               convtitleiconimg;
         Fl_Image*                   backgroundimg;
         Fl_RGB_Image*               backgroundimgcached;
-        bool                        backgroundfitting;
+        Fl_Align                    backgroundfitting;
         Fl_Callback*                cbOnMove;
         void*                       pdOnMove;
 };

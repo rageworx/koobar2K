@@ -74,9 +74,14 @@ MPG123Wrap::MPG123Wrap()
    metainfo( 0 ),
    fresh( false ),
    intflag( false ),
+   minbytes( 0 ),
    mp( NULL ),
    id3tv1( NULL ),
-   id3tv2( NULL )
+   id3tv2( NULL ),
+   param_frame_number( -1 ),
+   param_frames_left( 0 ),
+   param_start_frame( 0 ),
+   param_checkrange( 1 )
 {
     result = mpg123_init();
     mp = mpg123_new_pars( &result );
@@ -84,6 +89,8 @@ MPG123Wrap::MPG123Wrap()
 
     if ( mp != NULL )
     {
+        mpg123_getpar(mp, MPG123_INDEX_SIZE, &param_index_size, NULL);
+
         mpg123_delete_pars(mp);
     }
 
@@ -109,6 +116,15 @@ bool MPG123Wrap::Open( const char* path )
 
     if ( mpg123_open( mh, path ) == MPG123_OK )
     {
+        param_frame_number = -1;
+        param_frames_left = 0;
+        param_start_frame = 0;
+        param_checkrange = 1;
+
+        framenum = 0;
+
+        mpg123_getformat( mh, &fmt_rate, &fmt_channels, &fmt_encoding );
+
         unsigned prevs = mpg123_tell( mh );
 
         mpg123_seek( mh, 0, SEEK_SET );
@@ -122,6 +138,7 @@ bool MPG123Wrap::Open( const char* path )
             if ( reti == MPG123_OK )
             {
                 print_v2( id3tv2 );
+                printf("\n");
             }
             else
             {
@@ -130,7 +147,7 @@ bool MPG123Wrap::Open( const char* path )
 #endif // DEBUG
         }
 
-        mpg123_seek( mh, prevs, SEEK_SET );
+        //mpg123_seek( mh, prevs, SEEK_SET );
 
         return true;
     }
@@ -145,6 +162,9 @@ void MPG123Wrap::Close()
         mpg123_meta_free(mh);
         metainfo = 0;
     }
+
+    id3tv1 = NULL;
+    id3tv2 = NULL;
 
     if ( mpg123_close( mh ) == MPG123_OK )
     {
@@ -163,7 +183,7 @@ unsigned MPG123Wrap::DecodeFrame( unsigned char* &buffer, bool* nextavailed )
     while ( mc < 0 )
     {
         mc = mpg123_decode_frame(mh, &framenum, &buffer, &bytes);
-        //mpg123_getstate( mh, MPG123_FRESH_DECODER, &new_header, NULL );
+        mpg123_getstate( mh, MPG123_FRESH_DECODER, &new_header, NULL );
 
         if( bytes > 0 )
         {
@@ -182,8 +202,18 @@ unsigned MPG123Wrap::DecodeFrame( unsigned char* &buffer, bool* nextavailed )
 
         switch( mc )
         {
-            case MPG123_DONE:
+            case MPG123_NEW_FORMAT:
+                {
+                    mpg123_getformat( mh, &fmt_rate, &fmt_channels, &fmt_encoding );
+                }
+
             case MPG123_ERR:
+#ifdef DEBUG
+                {
+                    printf(" MPG123 Error : %s\n", mpg123_strerror(mh) );
+                }
+#endif // DEBUG
+            case MPG123_DONE:
                 {
                     *nextavailed = false;
                     return 0;
