@@ -121,7 +121,17 @@ int wMain::Run()
 
     // Wait for window has a handle ...
 
-    DirSearch* dsearch = new DirSearch( "./test", ".mp3" );
+    string dirpath = "./test";
+
+    if ( _argc > 1 )
+    {
+        if ( DirSearch::DirTest( _argv[1] ) == true )
+        {
+            dirpath = _argv[1];
+        }
+    }
+
+    DirSearch* dsearch = new DirSearch( dirpath.c_str(), ".mp3" );
     if ( dsearch != NULL )
     {
         vector< string >* plist = dsearch->data();
@@ -135,9 +145,12 @@ int wMain::Run()
 
         delete dsearch;
 
-        mp3queue = GetTickCount() % mp3list.size();
+        if ( mp3list.size() > 0 )
+        {
+            mp3queue = GetTickCount() % mp3list.size();
 
-        int ret = pthread_create( &_pt, NULL, pthread_work, this );
+            int ret = pthread_create( &_pt, NULL, pthread_work, this );
+        }
     }
 
     return Fl::run();
@@ -151,12 +164,16 @@ void* wMain::PThreadCall()
     if ( _firstthreadrun == true )
     {
         _firstthreadrun = false;
-        Sleep( 1000 );
+        Sleep( 100 );
+        Fl::flush();
     }
 
     mp3dec = new MPG123Wrap();
 
     if ( mp3dec == NULL )
+        return NULL;
+
+    if ( mp3list.size() == 0 )
         return NULL;
 
     const char* mp3fn = mp3list[ mp3queue ].c_str();
@@ -457,7 +474,8 @@ void wMain::loadTags()
     char tmpmap[80] = {0};
     char* chstr[] = { "no channel", "mono", "stereo", "multi channels"};
 
-    sprintf( tmpmap, "%s - %.1fKHz - type.%d",
+    sprintf( tmpmap, "[ %d / %d ] %s - %.1fKHz - type.%d",
+             mp3queue, mp3list.size(),
              chstr[ mp3dec->Channels() ],
              (float)mp3dec->FrameRate() / (float)1000,
              mp3dec->Encoding() );

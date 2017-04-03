@@ -9,7 +9,11 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#ifdef _WIN32
+#define DIR_SEP         '\\'
+#else
 #define DIR_SEP         '/'
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -22,6 +26,16 @@ DirSearch::DirSearch( const char* rootdir, const char* endfix )
     _rootdir = rootdir;
     _endfix = endfix;
 
+    dirsearch( rootdir, endfix );
+}
+
+DirSearch::~DirSearch()
+{
+    _filelist.clear();
+}
+
+void DirSearch::dirsearch( const char* rootdir, const char* endfix )
+{
     struct dirent* pDE = NULL;
 
     DIR* pDIR = opendir( rootdir );
@@ -33,15 +47,32 @@ DirSearch::DirSearch( const char* rootdir, const char* endfix )
         {
             string fname = pDE->d_name;
 
-            if ( fname.find( endfix ) != string::npos )
+            if ( ( fname != "." ) && ( fname != ".." ) )
             {
                 string cfname = rootdir;
                 cfname += DIR_SEP;
                 cfname += pDE->d_name;
 
-                printf( "%s\n", cfname.c_str() );
+                if ( DirTest( cfname.c_str() ) == true )
+                {
+                    string cfname = rootdir;
+                    cfname += DIR_SEP;
+                    cfname += pDE->d_name;
 
-                _filelist.push_back( cfname );
+                    dirsearch( cfname.c_str(), endfix );
+                }
+
+                if ( fname.find( endfix ) != string::npos )
+                {
+                    cfname = rootdir;
+                    cfname += DIR_SEP;
+                    cfname += pDE->d_name;
+
+#ifdef DEBUG
+                    printf( "%s\n", cfname.c_str() );
+#endif // DEBUG
+                    _filelist.push_back( cfname );
+                }
             }
 
             pDE = readdir( pDIR );
@@ -49,10 +80,17 @@ DirSearch::DirSearch( const char* rootdir, const char* endfix )
 
         closedir( pDIR );
     }
-
 }
 
-DirSearch::~DirSearch()
+bool DirSearch::DirTest( const char* dir )
 {
-    _filelist.clear();
+    DIR* pDIR = opendir( dir );
+    if ( pDIR != NULL )
+    {
+        closedir( pDIR );
+
+        return true;
+    }
+
+    return false;
 }

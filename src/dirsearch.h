@@ -11,8 +11,14 @@ class DirSearch
         ~DirSearch();
 
     public:
+        static bool DirTest( const char* dir );
+
+    public:
         std::vector< std::string >* data() { return &_filelist; }
         unsigned                    size() { return _filelist.size(); }
+
+    protected:
+        void dirsearch( const char* rootdir, const char* endfix );
 
     protected:
         std::string                 _rootdir;
@@ -20,4 +26,4 @@ class DirSearch
         std::vector< std::string >  _filelist;
 };
 
-#endif __DIRSEARCH_H__
+#endif /// of __DIRSEARCH_H__
