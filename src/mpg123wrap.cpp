@@ -70,6 +70,7 @@ void print_v2(mpg123_id3v2 *v2)
 
 MPG123Wrap::MPG123Wrap()
  : mh( NULL ),
+   filename( NULL ),
    networked( false ),
    metainfo( 0 ),
    fresh( false ),
@@ -111,11 +112,30 @@ bool MPG123Wrap::Open( const char* path )
 
     if ( strncmp( path, "http://", 7) == 0 ) /* http stream */
 	{
-        networked = true;
+        //networked = true;
+        // Currently not supported.
+        return false;
 	}
+
+	id3tv1 = NULL;
+	id3tv2 = NULL;
+	filesize = 0;
+	filequeue = 0;
+
+    fmt_version = 0;
+    fmt_layer = 0;
+    fmt_mode = 0;
+    fmt_rate = 0;
+    fmt_bitrate = 0;
+    fmt_abr_rate = 0;
+    fmt_channels = 0;
+    fmt_encoding = 0;
+    fmt_vbr = 0;
 
     if ( mpg123_open( mh, path ) == MPG123_OK )
     {
+        filename = strdup( path );
+
         param_frame_number = -1;
         param_frames_left = 0;
         param_start_frame = 0;
@@ -123,14 +143,40 @@ bool MPG123Wrap::Open( const char* path )
 
         framenum = 0;
 
-        mpg123_getformat( mh, &fmt_rate, &fmt_channels, &fmt_encoding );
+        if ( mpg123_info( mh, &mp3info ) == MPG123_OK )
+        {
+            switch( (int)mp3info.version )
+            {
+                case (int)MPG123_1_0:
+                    fmt_version = 0x00010000;
+                    break;
 
+                case (int)MPG123_2_0:
+                    fmt_version = 0x00020000;
+                    break;
+
+                case (int)MPG123_2_5:
+                    fmt_version = 0x00020005;
+                    break;
+            }
+
+            fmt_layer   = mp3info.layer;
+            fmt_mode    = mp3info.mode;
+            fmt_bitrate = mp3info.bitrate;
+            fmt_abr_rate = mp3info.abr_rate;
+            fmt_vbr     = mp3info.vbr;
+        }
+
+        mpg123_getformat( mh, &fmt_rate, &fmt_channels, &fmt_encoding );
         fmt_encoding = MPG123_SAMPLESIZE( fmt_encoding );
 
         unsigned prevs = mpg123_tell( mh );
 
+        mpg123_seek( mh, 0, SEEK_END );
+        filesize = mpg123_tell( mh );
+
         mpg123_seek( mh, 0, SEEK_SET );
-        metainfo = mpg123_meta_check(mh);
+        metainfo = mpg123_meta_check( mh );
 
         if( ( metainfo & MPG123_ID3 ) != 0 )
         {
@@ -139,8 +185,11 @@ bool MPG123Wrap::Open( const char* path )
 #ifdef DEBUG
             if ( reti == MPG123_OK )
             {
+                printf("============================\n");
+                printf("= ID3TAG v2. test          =\n");
+                printf("= ------------------------ =\n");
                 print_v2( id3tv2 );
-                printf("\n");
+                printf("============================\n");
             }
             else
             {
@@ -170,6 +219,11 @@ void MPG123Wrap::Close()
 
     if ( mpg123_close( mh ) == MPG123_OK )
     {
+        if ( filename != NULL )
+        {
+            free( filename );
+        }
+
         if ( networked == true )
         {
             networked = false;
@@ -186,6 +240,8 @@ unsigned MPG123Wrap::DecodeFrame( unsigned char* &buffer, bool* nextavailed )
     {
         mc = mpg123_decode_frame(mh, &framenum, &buffer, &bytes);
         mpg123_getstate( mh, MPG123_FRESH_DECODER, &new_header, NULL );
+
+        filequeue = mpg123_tell( mh );
 
         if( bytes > 0 )
         {
@@ -230,6 +286,15 @@ unsigned MPG123Wrap::DecodeFrame( unsigned char* &buffer, bool* nextavailed )
 void MPG123Wrap::SeekFrame( unsigned frmidx )
 {
 
+}
+
+void MPG123Wrap::DecodeFramePos( unsigned &curp, unsigned &maxp )
+{
+    if ( mh != NULL )
+    {
+        maxp = filesize;
+        curp = filequeue;
+    }
 }
 
 const char* MPG123Wrap::find_v2extras( const char* tname )
@@ -326,6 +391,17 @@ bool MPG123Wrap::GetTag( const char* scheme, unsigned char* &result, unsigned* t
                     if ( id3tv2->title->p != NULL )
                     {
                         retstr = id3tv2->title->p;
+                    }
+                }
+
+                if ( retstr.size() == 0 )
+                {
+                    retstr = filename;
+
+                    string::size_type fpos = retstr.find_last_of( '.' );
+                    if ( fpos != string::npos )
+                    {
+                        retstr = retstr.substr( 0, fpos );
                     }
                 }
             }

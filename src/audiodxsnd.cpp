@@ -18,9 +18,9 @@ using namespace std;
 ////////////////////////////////////////////////////////////////////////////////
 
 #define DEF_ADXS_RESERVE_BUFF_SZ        50 * 1024 * 1024
-#define DEF_ADXS_MIN_PLAYBUFF_SZ        512 * 1024
+#define DEF_ADXS_MIN_PLAYBUFF_SZ        256 * 1024
 //#define DEF_ADXS_MIN_NEXT_SZ            384
-#define DEF_ADXS_MIN_NEXT_SZ            128
+#define DEF_ADXS_MIN_NEXT_SZ            32
 
 #define TIME_PER_SAMPLE( _s_ )          ( 1.0f / (float)_s_ )
 
@@ -169,6 +169,7 @@ AudioOut::AResult AudioDXSound::FinalAudio()
 
 AudioOut::AResult AudioDXSound::ConfigAudio()
 {
+    // No options for DXSound.
     return FAIL;
 }
 
@@ -299,14 +300,14 @@ void* AudioDXSound::ThreadCall()
                         if ( ( _prevbufferque < pdxb->position ) &&
                              ( pdxb->position < _buffer.size() ) )
                         {
+                            pdxb->pdxbuffer->Play( 0, 0, 0 );
+                            pdxb->status = PLAYING;
 #ifdef DEBUG
                             printf( "Continued play _dxbidx_r = %d ( pos = %d / %d )\n",
                                     _dxbidx_r,
                                     pdxb->position,
                                     _buffer.size() );
 #endif // DEBUG
-                            pdxb->pdxbuffer->Play( 0, 0, 0 );
-                            pdxb->status = PLAYING;
 
                             _prevbufferque = pdxb->position;
                         }
@@ -321,15 +322,13 @@ void* AudioDXSound::ThreadCall()
                 if ( beremoved != NULL )
                 {
                     // Make Volume to Zero for removing popping noise !
-                    beremoved->pdxbuffer->SetVolume( 0 );
-                    beremoved->pdxbuffer->Stop();
+                    // beremoved->pdxbuffer->SetVolume( 0 );
+                    // beremoved->pdxbuffer->Stop();
                     beremoved->status = PLAYED;
 
                     if ( beremoved->endofbuffer == false )
                     {
                         // Generate next buffer.
-
-                        // Check again ?
                         createNextBuffer();
                     }
                     else
@@ -441,7 +440,7 @@ bool AudioDXSound::createNextBuffer( bool flushleft )
 
             if ( _event != NULL )
             {
-                _event->OnNewBuffer( _currentbufferque - buffsz, buffsz, curbuffsz );
+                _event->OnNewBuffer( _currentbufferque - buffsz, buffsz, 0xFFFFFFFF );
             }
 
             return true;

@@ -93,6 +93,8 @@
 		<Unit filename="src/dirsearch.h" />
 		<Unit filename="src/fl/Fl_BorderlessWindow.H" />
 		<Unit filename="src/fl/Fl_BorderlessWindow.cpp" />
+		<Unit filename="src/fl/Fl_SeekBar.cpp" />
+		<Unit filename="src/fl/Fl_SeekBar.h" />
 		<Unit filename="src/main.cpp" />
 		<Unit filename="src/minGlue.h" />
 		<Unit filename="src/minIni.cpp" />
@@ -108,6 +110,7 @@
 		<Unit filename="src/themes.h" />
 		<Unit filename="src/wMain.cpp" />
 		<Unit filename="src/wMain.h" />
+		<Unit filename="src/winbtnspng.cpp" />
 		<Extensions>
 			<code_completion />
 			<envvars />

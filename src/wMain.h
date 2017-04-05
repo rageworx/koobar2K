@@ -6,9 +6,11 @@
 #include <FL/Fl_Menu_Bar.H>
 #include <FL/Fl_Scroll.H>
 #include <FL/Fl_Image.H>
+#include <FL/Fl_Button.H>
 
 #include "Fl_BorderlessWindow.H"
-#include "Fl_GroupAniSwitch.h"
+//#include "Fl_GroupAniSwitch.h"
+#include "Fl_SeekBar.h"
 
 #include <list>
 #include <vector>
@@ -44,6 +46,7 @@ class wMain : public AudioOutEvent
         void applyThemes();
         void loadTags();
         void loadArtCover();
+        void updateInfo();
         unsigned image_color_illum( Fl_RGB_Image* img );
 
     protected:
@@ -61,20 +64,26 @@ class wMain : public AudioOutEvent
         Fl_BorderlessWindow*    mainWindow;
         Fl_Group*               grpViewer;
         Fl_Box*                 boxCoverArt;
+        Fl_SeekBar*             skbProgress;
+        Fl_Box*                 boxTrackNo;
         Fl_Box*                 boxArtist;
         Fl_Box*                 boxAlbum;
         Fl_Box*                 boxTitle;
         Fl_Box*                 boxMiscInfo;
         Fl_Box*                 boxFileInfo;
-        Fl_Group*               grpStatus;
+        Fl_Button*              btnPrevTrk;
+        Fl_Button*              btnPlayStop;
+        Fl_Button*              btnNextTrk;
         Fl_Group*               grpOverlay;
-        Fl_Box*                 boxStatus;
-        Fl_GroupAniSwitch*      testswitch;
+        //Fl_GroupAniSwitch*      testswitch;
         Fl_RGB_Image*           winbgimg;
 
     protected:
         AudioOut*               aout;
         MPG123Wrap*             mp3dec;
+        unsigned                mp3dpos_cur;
+        unsigned                mp3dpos_max;
+        std::string             strinf_trackno;
         std::string             strtag_artist;
         std::string             strtag_title;
         std::string             strtag_album;

@@ -50,7 +50,7 @@ wMain::wMain( int argc, char** argv )
    _runsatfullscreen( false ),
    _keyprocessing( false ),
    _firstthreadrun( true ),
-   testswitch( NULL ),
+   //testswitch( NULL ),
    winbgimg( NULL ),
    aout( NULL )
 {
@@ -176,9 +176,10 @@ void* wMain::PThreadCall()
     if ( mp3list.size() == 0 )
         return NULL;
 
-    const char* mp3fn = mp3list[ mp3queue ].c_str();
+    mp3dpos_cur = 0;
+    mp3dpos_max = 0;
 
-    printf("MP3 : %s\n", mp3fn );
+    const char* mp3fn = mp3list[ mp3queue ].c_str();
 
     if ( mp3dec->Open( mp3fn ) == false )
     {
@@ -186,10 +187,15 @@ void* wMain::PThreadCall()
         return NULL;
     }
 
+    // Display progress to first ...
+    OnNewBuffer( 1, 10, 100 );
+
     bool bPlayed = false;
 
     loadTags();
     loadArtCover();
+
+    mainWindow->redraw();
 
     while( _threadkillswitch == false )
     {
@@ -198,6 +204,7 @@ void* wMain::PThreadCall()
         if ( mp3dec != NULL )
         {
             bool isnext = false;
+            mp3dec->DecodeFramePos( mp3dpos_cur, mp3dpos_max );
             unsigned abuffsz = mp3dec->DecodeFrame( abuff, &isnext );
 
             if ( abuffsz > 0 )
@@ -261,7 +268,44 @@ void wMain::createComponents()
         mainWindow->bgimage( winbgimg, FL_ALIGN_CENTER );
         mainWindow->setcleartype( true );
 
-        grpViewer = new Fl_Group( cli_x, cli_y , cli_w, cli_h - 20 );
+        extern unsigned char pngimg_minimize[];
+        extern unsigned pngimg_minimize_size;
+
+        extern unsigned char pngimg_maximize[];
+        extern unsigned pngimg_maximize_size;
+
+        extern unsigned char pngimg_quit[];
+        extern unsigned pngimg_quit_size;
+
+        extern unsigned char pngimg_b2size[];
+        extern unsigned pngimg_b2size_size;
+
+        Fl_RGB_Image* imgwb[4] = {NULL};
+
+        imgwb[0] = (Fl_RGB_Image*)new Fl_PNG_Image( "winbtn1",
+                                                    pngimg_minimize,
+                                                    pngimg_minimize_size );
+
+        imgwb[1] = (Fl_RGB_Image*)new Fl_PNG_Image( "winbtn2",
+                                                    pngimg_maximize,
+                                                    pngimg_maximize_size );
+
+        imgwb[2] = (Fl_RGB_Image*)new Fl_PNG_Image( "winbtn3",
+                                                    pngimg_quit,
+                                                    pngimg_quit_size );
+
+        imgwb[3] = (Fl_RGB_Image*)new Fl_PNG_Image( "winbtn4",
+                                                    pngimg_b2size,
+                                                    pngimg_b2size_size );
+
+        for( unsigned cnt=0; cnt<4; cnt++ )
+        {
+            fl_imgtk::invert_ex( imgwb[cnt] );
+            mainWindow->controlbuttonsimage( cnt, imgwb[cnt] );
+            delete imgwb[cnt];
+        }
+
+        grpViewer = new Fl_Group( cli_x, cli_y , cli_w, cli_h );
         if ( grpViewer != NULL )
         {
             grpViewer->begin();
@@ -280,11 +324,26 @@ void wMain::createComponents()
 
         cli_y += test_h;
 
+        skbProgress = new Fl_SeekBar( cli_x + 10 , cli_y, test_w, 3 );
+
+        cli_y += 3;
+
+        boxTrackNo = new Fl_Box( cli_x + 10 , cli_y, test_w, 30 );
+        if ( boxTrackNo != NULL )
+        {
+            boxTrackNo->align( FL_ALIGN_INSIDE | FL_ALIGN_TOP_RIGHT );
+            boxTrackNo->labelfont( FL_COURIER_ITALIC );
+            boxTrackNo->label( "000/000" );
+            boxTrackNo->labelcolor( 0x33333300 );
+            boxTrackNo->labelsize( 10 );
+        }
+
         boxTitle = new Fl_Box( cli_x + 10 , cli_y, test_w, 30 );
         if ( boxTitle != NULL )
         {
             boxTitle->label( "No title" );
             boxTitle->labelcolor( 0x33333300 );
+            boxTitle->labelfont( FL_FREE_FONT );
             boxTitle->labelsize( 20 );
         }
 
@@ -295,6 +354,7 @@ void wMain::createComponents()
         {
             boxAlbum->label( "No album" );
             boxAlbum->labelcolor( 0x33333300 );
+            boxAlbum->labelfont( FL_FREE_FONT );
             boxAlbum->labelsize( 14 );
         }
 
@@ -305,6 +365,7 @@ void wMain::createComponents()
         {
             boxArtist->label( "No artist" );
             boxArtist->labelcolor( 0x33333300 );
+            boxArtist->labelfont( FL_FREE_FONT );
             boxArtist->labelsize( 14 );
         }
 
@@ -315,6 +376,7 @@ void wMain::createComponents()
         {
             boxMiscInfo->label( "No more information" );
             boxMiscInfo->labelcolor( 0x33333300 );
+            boxMiscInfo->labelfont( FL_FREE_FONT );
             boxMiscInfo->labelsize( 12 );
         }
 
@@ -325,9 +387,13 @@ void wMain::createComponents()
         {
             boxFileInfo->label( "No file information" );
             boxFileInfo->labelcolor( 0x33333300 );
+            boxFileInfo->labelfont( FL_FREE_FONT );
             boxFileInfo->labelsize( 12 );
         }
 
+        cli_y += 20;
+
+        // Last empty box for resize NULL container.
         cli_y += 20;
 
         Fl_Box* testempty = new Fl_Box(  cli_x , cli_y, cli_w, cli_h - cli_y );
@@ -343,21 +409,6 @@ void wMain::createComponents()
         {
             grpViewer->end();
             mainWindow->clientarea()->resizable( grpViewer );
-        }
-
-        grpStatus = new Fl_Group( cli_x, cli_y + cli_h - 20, cli_w, 20 );
-        if ( grpStatus != NULL )
-        {
-            grpStatus->begin();
-
-            boxStatus = new Fl_Box( cli_x, cli_y + cli_h - 20, cli_w, 20 );
-            if ( boxStatus != NULL )
-            {
-                //boxStatus->box( FL_NO_BOX );
-                boxStatus->label( "NONE." );
-            }
-
-            grpStatus->end();
         }
 
         grpOverlay = new Fl_Group( cli_x, cli_y, cli_w, cli_h );
@@ -424,67 +475,110 @@ void wMain::loadTags()
 
     if ( mp3dec->GetTag( "track" , tmpstr, &tmpstrsz) == true )
     {
-        strtag_title = (const char*)tmpstr;
-        strtag_title += " ";
+        if ( tmpstr != NULL )
+        {
+            strtag_title = (const char*)tmpstr;
+            strtag_title += ".";
 
-        free( tmpstr );
+            free( tmpstr );
+        }
     }
 
     if ( mp3dec->GetTag( "title" , tmpstr, &tmpstrsz) == true )
     {
-        strtag_title += (const char*)tmpstr;
-        free( tmpstr );
+        if ( tmpstr != NULL )
+        {
+            strtag_title += (const char*)tmpstr;
+
+            free( tmpstr );
+        }
 
         boxTitle->label( strtag_title.c_str() );
     }
 
     if ( mp3dec->GetTag( "album" , tmpstr, &tmpstrsz) == true )
     {
-        strtag_album = (const char*)tmpstr;
-        free( tmpstr );
+        if ( tmpstr != NULL )
+        {
+            strtag_album = (const char*)tmpstr;
+
+            free( tmpstr );
+        }
     }
+
+    if ( mp3dec->GetTag( "year", tmpstr, &tmpstrsz ) == true )
+    {
+        if ( tmpstr != NULL )
+        {
+            if ( strtag_album.size() > 0 )
+            {
+                strtag_album += " (";
+                strtag_album += (const char*)tmpstr;
+                strtag_album += ")";
+            }
+            else
+            {
+                strtag_album += (const char*)tmpstr;
+            }
+
+            free( tmpstr );
+        }
+    }
+
 
     if ( mp3dec->GetTag( "artist" , tmpstr, &tmpstrsz) == true )
     {
-        strtag_artist = (const char*)tmpstr;
-        free( tmpstr );
+        if ( tmpstr != NULL )
+        {
+            strtag_artist = (const char*)tmpstr;
+
+            free( tmpstr );
+        }
     }
 
     strtag_moreinfo.clear();
 
     if ( mp3dec->GetTag( "genre", tmpstr, &tmpstrsz ) == true )
     {
-        strtag_moreinfo += (const char*)tmpstr;
-        free( tmpstr );
-    }
-
-    if ( mp3dec->GetTag( "year", tmpstr, &tmpstrsz ) == true )
-    {
-        if ( strtag_moreinfo.size() > 0 )
+        if ( tmpstr != NULL )
         {
-            strtag_moreinfo += ", ";
+            strtag_moreinfo += (const char*)tmpstr;
+
+            free( tmpstr );
         }
-
-        strtag_moreinfo += (const char*)tmpstr;
-        free( tmpstr );
     }
-
-    strtag_fileinfo.clear();
-
-    char tmpmap[80] = {0};
-    char* chstr[] = { "no channel", "mono", "stereo", "multi channels"};
-
-    sprintf( tmpmap, "[ %d / %d ] %s - %.1fKHz - type.%d",
-             mp3queue, mp3list.size(),
-             chstr[ mp3dec->Channels() ],
-             (float)mp3dec->FrameRate() / (float)1000,
-             mp3dec->Encoding() );
-
-    strtag_fileinfo = tmpmap;
 
     boxAlbum->label( strtag_album.c_str() );
     boxArtist->label( strtag_artist.c_str() );
     boxMiscInfo->label( strtag_moreinfo.c_str() );
+
+    updateInfo();
+}
+
+void wMain::updateInfo()
+{
+    char tmpmap[80] = {0};
+
+    strinf_trackno.clear();
+
+    sprintf( tmpmap, "%03d/%03d", mp3queue + 1, mp3list.size() );
+    strinf_trackno = tmpmap;
+    boxTrackNo->label( strinf_trackno.c_str() );
+
+    strtag_fileinfo.clear();
+
+    char* strstro[] = { "stereo", "joint-stereo", "dual", "mono" };
+    char* strbrs[] = { "CBR", "VBR", "ABR" };
+
+    sprintf( tmpmap, "%s - %.1fKHz - %s - %dKbps - mpeg.l%d",
+             strstro[ mp3dec->Mode() ],
+             (float)mp3dec->Frequency() / (float)1000,
+             strbrs[ mp3dec->BRtype() ],
+             mp3dec->BitRate(),
+             mp3dec->Layer() );
+
+    strtag_fileinfo = tmpmap;
+
     boxFileInfo->label( strtag_fileinfo.c_str() );
 }
 
@@ -547,19 +641,8 @@ void wMain::loadArtCover()
 
             mainWindow->bgimage( winbgimg, FL_ALIGN_CENTER );
 
-            uchar avril = 0xFF - image_color_illum( winbgimg );
-            Fl_Color newcol = 0;
-
-            if ( avril < 0x7F )
-            {
-                avril /= 2;
-            }
-            else
-            {
-                avril *= 2;
-            }
-
-            newcol = ( avril << 24 ) | ( avril << 16 ) | ( avril << 8 );
+            // No need get illumination, it always draws bright color.
+            Fl_Color newcol = 0xCFCFCFFF;
 
             mainWindow->labelcolor( newcol );
             boxArtist->labelcolor( newcol );
@@ -567,6 +650,19 @@ void wMain::loadArtCover()
             boxTitle->labelcolor( newcol );
             boxMiscInfo->labelcolor( newcol );
             boxFileInfo->labelcolor( newcol );
+
+            boxTrackNo->labelcolor( fl_darker( newcol ) );
+
+            for( unsigned cnt=0; cnt<4; cnt++ )
+            {
+                Fl_Image* pimg = mainWindow->controlbuttonsimage( cnt );
+                if ( pimg != NULL )
+                {
+                    fl_imgtk::invert_ex( (Fl_RGB_Image*)pimg );
+                }
+            }
+
+            mainWindow->refreshcontrolbuttonsimages();
 
             mainWindow->redraw();
         }
@@ -631,15 +727,6 @@ void wMain::applyThemes()
         rkrawv::ApplyBWindowTheme( mainWindow );
     }
 
-    if ( grpStatus != NULL )
-    {
-        rkrawv::ApplyGroupTheme( grpStatus );
-
-        if ( boxStatus != NULL )
-        {
-            rkrawv::ApplyStatusBoxTheme( boxStatus );
-        }
-    }
 }
 
 void wMain::WidgetCB( Fl_Widget* w )
@@ -678,6 +765,18 @@ void wMain::MoveCB( Fl_Widget* w )
 void wMain::OnNewBuffer( unsigned position, unsigned nbsz, unsigned maxposition )
 {
     //printf("audio new buffer at %d + %d bytes \n", position, nbsz );
+    if ( skbProgress != NULL )
+    {
+        skbProgress->range( 1, maxposition );
+        skbProgress->currentposition( position );
+
+        unsigned ppos = ( (float)mp3dpos_cur / (float)mp3dpos_max ) * (float)maxposition;
+        skbProgress->bufferedposition( ppos );
+
+        skbProgress->update();
+        skbProgress->redraw();
+        Fl::flush();
+    }
 }
 
 void wMain::OnBufferEnd()

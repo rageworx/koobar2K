@@ -16,12 +16,20 @@ class MPG123Wrap
     public:
         unsigned DecodeFrame( unsigned char* &buffer, bool* nextavailed );
         void     SeekFrame( unsigned frmidx );
+        void     DecodeFramePos( unsigned &curp, unsigned &maxp );
 
     public:
         bool GetTag( const char* scheme, unsigned char* &result, unsigned* tagsz );
 
     public:
-        long FrameRate()    { return fmt_rate; }
+        unsigned Version()  { return fmt_version; }
+        int  Layer()        { return fmt_layer; }
+        int  Mode()         { return fmt_mode; }
+        long Frequency()    { return fmt_rate; }
+        int  BRtype()       { return fmt_vbr; }
+        int  BitRate()      { switch( fmt_vbr ){ \
+                                case MPG123_CBR:case MPG123_VBR:return fmt_bitrate;break; \
+                                case MPG123_ABR:return fmt_abr_rate; break;} }
         int  Channels()     { return fmt_channels; }
         int  Encoding()     { return fmt_encoding; }
 
@@ -31,6 +39,9 @@ class MPG123Wrap
 
     protected:
         mpg123_handle*  mh;
+        char*           filename;
+        unsigned        filesize;
+        unsigned        filequeue;
         int             result;
         bool            networked;
         int             metainfo;
@@ -49,13 +60,21 @@ class MPG123Wrap
         int             param_start_frame;
         int             param_checkrange;
 
+        unsigned        fmt_version;
+        int             fmt_layer;
+        int             fmt_mode;
         long            fmt_rate;
+        int             fmt_bitrate;
+        int             fmt_abr_rate;
         int             fmt_channels;
         int             fmt_encoding;
+        int             fmt_vbr;
 
         mpg123_pars*    mp;
         mpg123_id3v1*   id3tv1;
         mpg123_id3v2*   id3tv2;
+        struct\
+        mpg123_frameinfo mp3info;
 };
 
 #endif // __MPG123WRAP_H__

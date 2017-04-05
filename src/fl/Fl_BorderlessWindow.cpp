@@ -1,6 +1,8 @@
 #ifdef DEBUG
-    #ifndef _WIN32
-        #define _WIN32
+    #ifdef __MINGW32__
+        #ifndef _WIN32
+            #define _WIN32
+        #endif
     #endif
 #endif
 
@@ -12,10 +14,13 @@
 
 #include <FL/fl_draw.H>
 #include "Fl_BorderlessWindow.H"
+#include <FL/Fl_PNG_Image.H>
 #include "fl_imgtk.h"
 
 #include <algorithm>
 #include <cmath>
+
+////////////////////////////////////////////////////////////////////////////////
 
 using namespace std;
 
@@ -219,9 +224,6 @@ int Fl_BorderlessWindowTitle::handle( int e )
 
                         Fl::get_mouse( grab_x, grab_y );
 
-                        //grab_x += bwin->x();
-                        //grab_y += bwin->y();
-
                         grab_x -= bwin->x();
                         grab_y -= bwin->y();
 
@@ -334,6 +336,11 @@ Fl_BorderlessWindow::Fl_BorderlessWindow( int W, int H, const char* T )
     boxWindowButtons[1] = NULL;
     boxWindowButtons[2] = NULL;
 
+    imgWindowButtons[0] = NULL;
+    imgWindowButtons[1] = NULL;
+    imgWindowButtons[2] = NULL;
+    imgWindowButtons[3] = NULL;
+
     Fl_Double_Window::border( 0 );
     Fl_Double_Window::box( FL_THIN_UP_BOX );
 
@@ -442,6 +449,14 @@ Fl_BorderlessWindow::Fl_BorderlessWindow( int W, int H, const char* T )
 Fl_BorderlessWindow::~Fl_BorderlessWindow()
 {
     releaseconvtitleiconimg();
+
+    for( unsigned cnt=0; cnt<4; cnt++ )
+    {
+        if ( imgWindowButtons[ cnt ] != NULL )
+        {
+            delete imgWindowButtons[ cnt ];
+        }
+    }
 
     if ( backgroundimgcached != NULL )
     {
@@ -572,6 +587,58 @@ void Fl_BorderlessWindow::bgimage( Fl_Image* i, Fl_Align fitting )
     if ( backgroundimgcached != NULL )
     {
         fl_imgtk::discard_user_rgb_image( backgroundimgcached );
+    }
+}
+
+void Fl_BorderlessWindow::controlbuttonsimage( int idx, Fl_Image* i )
+{
+    if ( idx > 3 )
+        return;
+
+    if ( i == NULL )
+        return;
+
+    if ( ( i->w() == 0 ) || ( i->h() == 0 ) )
+        return;
+
+    if ( imgWindowButtons[ idx ] != NULL )
+    {
+        delete imgWindowButtons[ idx ];
+    }
+
+    imgWindowButtons[ idx ] = i->copy();
+
+    if ( idx == 3 )
+        idx = 1;
+
+    boxWindowButtons[ idx ]->image( imgWindowButtons[ idx ] );
+    boxWindowButtons[ idx ]->label( NULL );
+}
+
+void Fl_BorderlessWindow::refreshcontrolbuttonsimages()
+{
+    for( unsigned cnt=0; cnt<3; cnt++ )
+    {
+        if ( imgWindowButtons[ cnt ] != NULL )
+        {
+            boxWindowButtons[ cnt ]->deimage();
+
+            if ( maximized_wh == true )
+            {
+                int idx = cnt;
+
+                if ( cnt == 1 )
+                    idx = 3;
+
+                boxWindowButtons[ cnt ]->image( imgWindowButtons[ idx ] );
+            }
+            else
+            {
+                boxWindowButtons[ cnt ]->image( imgWindowButtons[ cnt ] );
+            }
+
+            boxWindowButtons[ cnt ]->redraw();
+        }
     }
 }
 
@@ -976,6 +1043,15 @@ void Fl_BorderlessWindow::WCB( Fl_Widget* w )
             if( boxWindowButtons[1] != NULL )
             {
                 boxWindowButtons[1]->label( DEF_FL_BWINDOW_SYS_BTN_TEXT_MAXIMIZE );
+
+                if ( imgWindowButtons[1] != NULL )
+                {
+                    if ( imgWindowButtons[1]->w() > 0 )
+                    {
+                        boxWindowButtons[1]->image( imgWindowButtons[1] );
+                        boxWindowButtons[1]->label( NULL );
+                    }
+                }
             }
 
             regenbgcache( prev_fs_w, prev_fs_h );
@@ -993,6 +1069,16 @@ void Fl_BorderlessWindow::WCB( Fl_Widget* w )
             if( boxWindowButtons[1] != NULL )
             {
                 boxWindowButtons[1]->label( DEF_FL_BWINDOW_SYS_BTN_TEXT_RETURNSIZE );
+
+                if ( imgWindowButtons[3] != NULL )
+                {
+                    if ( imgWindowButtons[3]->w() > 0 )
+                    {
+                        boxWindowButtons[1]->image( imgWindowButtons[3] );
+                        boxWindowButtons[1]->label( NULL );
+                    }
+                }
+
             }
 
             int scrn_x;

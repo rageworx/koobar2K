@@ -75,6 +75,13 @@ class Fl_BorderlessWindow : public Fl_Double_Window
         void setcleartype( bool b );
         void titleicon( Fl_Image* i );
         void bgimage( Fl_Image* i, Fl_Align fitting = FL_ALIGN_LEFT_TOP );
+        // Index of button images
+        // 0: minimize
+        // 1: maximize
+        // 2: quit
+        // 3: back to previous size.
+        void controlbuttonsimage( int idx, Fl_Image* i );
+        void refreshcontrolbuttonsimages();
 #ifdef _WIN32
         void titleicon( HICON i );
 #endif // _WIN32
@@ -86,7 +93,11 @@ class Fl_BorderlessWindow : public Fl_Double_Window
         void WCB( Fl_Widget* w );
 
     public:
-        Fl_Image* bgimage()             { return backgroundimg; }
+        Fl_Image* bgimage()  \
+                  { return backgroundimg; }
+        Fl_Image* controlbuttonsimage( int idx ) \
+                  { if ( idx > 3 ) return NULL; \
+                    return (Fl_Image*)imgWindowButtons[ idx ]; }
 
     public:
         int clientarea_x();
@@ -133,6 +144,7 @@ class Fl_BorderlessWindow : public Fl_Double_Window
         Fl_Box*                     boxWindowIcon;
         Fl_BorderlessWindowTitle*   boxWindowTitle;
         Fl_Button*                  boxWindowButtons[3];
+        Fl_Image*                   imgWindowButtons[4];
         Fl_Group*                   grpInnerWindow;
         Fl_RGB_Image*               convtitleiconimg;
         Fl_Image*                   backgroundimg;
