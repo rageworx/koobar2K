@@ -100,11 +100,12 @@ class Fl_BorderlessWindow : public Fl_Double_Window
                     return (Fl_Image*)imgWindowButtons[ idx ]; }
 
     public:
-        int clientarea_x();
-        int clientarea_y();
-        int clientarea_w();
-        int clientarea_h();
-        Fl_Group*   clientarea();
+        void      clientarea_sizes( int &x, int &y, int &w, int &h );
+        int       clientarea_x();
+        int       clientarea_y();
+        int       clientarea_w();
+        int       clientarea_h();
+        Fl_Group* clientarea();
 
     public:
         void procdblclktitle();

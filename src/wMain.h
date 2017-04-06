@@ -11,6 +11,8 @@
 #include "Fl_BorderlessWindow.H"
 //#include "Fl_GroupAniSwitch.h"
 #include "Fl_SeekBar.h"
+#include "Fl_TransBox.h"
+#include "Fl_FocusEffectButton.H"
 
 #include <list>
 #include <vector>
@@ -46,8 +48,14 @@ class wMain : public AudioOutEvent
         void applyThemes();
         void loadTags();
         void loadArtCover();
+        void updateTrack();
         void updateInfo();
+        void setNoArtCover();
+        void switchPlayButton( int state = 0 );
+        void loadPlayList();
+        void playControl( int action );
         unsigned image_color_illum( Fl_RGB_Image* img );
+        void requestWindowRedraw();
 
     protected:
         int     _argc;
@@ -58,6 +66,9 @@ class wMain : public AudioOutEvent
         bool        _keyprocessing;
         bool        _threadkillswitch;
         bool        _firstthreadrun;
+        bool        _mp3art_loaded;
+        bool        _mp3onplaying;
+        int         _mp3controlstate;
         pthread_t   _pt;
 
     protected:
@@ -71,16 +82,24 @@ class wMain : public AudioOutEvent
         Fl_Box*                 boxTitle;
         Fl_Box*                 boxMiscInfo;
         Fl_Box*                 boxFileInfo;
-        Fl_Button*              btnPrevTrk;
-        Fl_Button*              btnPlayStop;
-        Fl_Button*              btnNextTrk;
+        Fl_Group*               grpControl;
+        Fl_TransBox*            boxControlBG;
+        Fl_FocusEffectButton*   btnPrevTrk;
+        Fl_FocusEffectButton*   btnPlayStop;
+        Fl_FocusEffectButton*   btnNextTrk;
         Fl_Group*               grpOverlay;
         //Fl_GroupAniSwitch*      testswitch;
-        Fl_RGB_Image*           winbgimg;
+        Fl_RGB_Image*           imgWinBG;
+        Fl_RGB_Image*           imgNoArt;
+        Fl_RGB_Image*           imgPlayCtrls[4];
+        Fl_Color                colLabelNoArt;
+        Fl_Color                colLabelArt;
 
     protected:
         AudioOut*               aout;
         MPG123Wrap*             mp3dec;
+        unsigned                mp3_channels;
+        unsigned                mp3_frequency;
         unsigned                mp3dpos_cur;
         unsigned                mp3dpos_max;
         std::string             strinf_trackno;
@@ -92,6 +111,7 @@ class wMain : public AudioOutEvent
 
     protected:
         std::vector< std::string >  mp3list;
+        std::vector< unsigned >     mp3listLUT;
         unsigned                    mp3queue;
 };
 

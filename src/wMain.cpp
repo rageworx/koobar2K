@@ -8,6 +8,8 @@
 #include <cstdio>
 #include <cstring>
 
+#include <algorithm>
+
 #include "wMain.H"
 #include <FL/fl_ask.H>
 #include <FL/Fl_draw.H>
@@ -37,10 +39,9 @@ using namespace fl_imgtk;
 
 void fl_w_cb( Fl_Widget* w, void* p );
 void fl_move_cb( Fl_Widget* w, void* p );
+void fl_redraw_timer_cb( void* p );
 
 void* pthread_work( void* p );
-
-extern void getartmask( unsigned char* &data, unsigned &sz );
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -50,12 +51,20 @@ wMain::wMain( int argc, char** argv )
    _runsatfullscreen( false ),
    _keyprocessing( false ),
    _firstthreadrun( true ),
+   _pt( NULL ),
    //testswitch( NULL ),
-   winbgimg( NULL ),
+   _mp3art_loaded( false),
+   _mp3onplaying( false ),
+   _mp3controlstate( -1 ),
+   imgWinBG( NULL ),
+   imgNoArt( NULL ),
    aout( NULL )
 {
     parseParams();
     createComponents();
+
+    colLabelNoArt = 0x33333300;
+    colLabelArt   = 0xCFCFCF00;
 
 #ifdef _WIN32
     HICON
@@ -96,16 +105,25 @@ wMain::wMain( int argc, char** argv )
     // Init audio.
     HWND hParent = fl_xid( mainWindow );
 
+    mp3_frequency = 44100;
+    mp3_channels  = 2;
+
     aout = new AudioDXSound( hParent, this );
 
     if ( aout != NULL )
     {
-        aout->InitAudio( 2, 44100 );
+        aout->InitAudio( mp3_channels, mp3_frequency );
     }
+
+    // Registering timer.
+    Fl::add_timeout( 0.1f, fl_redraw_timer_cb, this );
 }
 
 wMain::~wMain()
 {
+    // Removing timer.
+    Fl::remove_timeout( fl_redraw_timer_cb );
+
     if ( aout != NULL )
     {
         aout->Control( AudioOut::STOP, 0, 0 );
@@ -119,54 +137,25 @@ int wMain::Run()
 {
     _threadkillswitch = false;
 
-    // Wait for window has a handle ...
-
-    string dirpath = "./test";
-
-    if ( _argc > 1 )
-    {
-        if ( DirSearch::DirTest( _argv[1] ) == true )
-        {
-            dirpath = _argv[1];
-        }
-    }
-
-    DirSearch* dsearch = new DirSearch( dirpath.c_str(), ".mp3" );
-    if ( dsearch != NULL )
-    {
-        vector< string >* plist = dsearch->data();
-        if ( plist->size() > 0 )
-        {
-            for( unsigned cnt=0; cnt<plist->size(); cnt++ )
-            {
-                mp3list.push_back( plist->at( cnt ) );
-            }
-        }
-
-        delete dsearch;
-
-        if ( mp3list.size() > 0 )
-        {
-            mp3queue = GetTickCount() % mp3list.size();
-
-            int ret = pthread_create( &_pt, NULL, pthread_work, this );
-        }
-    }
+    loadPlayList();
 
     return Fl::run();
 }
 
 void* wMain::PThreadCall()
 {
+    _mp3onplaying = false;
+
     if ( aout == NULL )
         return NULL;
 
+    /*
     if ( _firstthreadrun == true )
     {
         _firstthreadrun = false;
         Sleep( 100 );
-        Fl::flush();
     }
+    */
 
     mp3dec = new MPG123Wrap();
 
@@ -179,7 +168,8 @@ void* wMain::PThreadCall()
     mp3dpos_cur = 0;
     mp3dpos_max = 0;
 
-    const char* mp3fn = mp3list[ mp3queue ].c_str();
+    unsigned idx = mp3listLUT[ mp3queue ];
+    const char* mp3fn = mp3list[ idx ].c_str();
 
     if ( mp3dec->Open( mp3fn ) == false )
     {
@@ -187,15 +177,15 @@ void* wMain::PThreadCall()
         return NULL;
     }
 
-    // Display progress to first ...
-    OnNewBuffer( 1, 10, 100 );
+    switchPlayButton( 0 );
 
-    bool bPlayed = false;
+    // Display progress to first ...
+    OnNewBuffer( 1, 10, 10000 );
 
     loadTags();
     loadArtCover();
 
-    mainWindow->redraw();
+    requestWindowRedraw();
 
     while( _threadkillswitch == false )
     {
@@ -207,17 +197,27 @@ void* wMain::PThreadCall()
             mp3dec->DecodeFramePos( mp3dpos_cur, mp3dpos_max );
             unsigned abuffsz = mp3dec->DecodeFrame( abuff, &isnext );
 
+            if ( ( mp3_frequency != mp3dec->Frequency() ) ||
+                 ( mp3_channels  != mp3dec->Channels() ) )
+            {
+                mp3_frequency = mp3dec->Frequency();
+                mp3_channels  = mp3dec->Channels();
+
+                aout->InitAudio( mp3_channels, mp3_frequency );
+            }
+
             if ( abuffsz > 0 )
             {
                 aout->WriteBuffer( abuff, abuffsz );
 
-                if ( bPlayed == false )
+                if ( _mp3onplaying == false )
                 {
                     aout->Control( AudioOut::PLAY, 0, 0 );
                     //bPlayed = true;
                     if ( aout->ControlState() == AudioOut::PLAY )
                     {
-                        bPlayed = true;
+                        switchPlayButton( 1 );
+                        _mp3onplaying = true;
                     }
                 }
             }
@@ -260,12 +260,8 @@ void wMain::createComponents()
         int cli_x = mainWindow->clientarea_x();
         int cli_y = mainWindow->clientarea_y();
         int cli_w = mainWindow->clientarea_w();
-        int cli_h = mainWindow->clientarea_h();
+        int cli_h = cli_y + mainWindow->clientarea_h();
 
-        winbgimg = fl_imgtk::makegradation_h( DEF_APP_DEFAULT_W, DEF_APP_DEFAULT_H,
-                                              0xCCCCCC00, 0x99999900, true );
-
-        mainWindow->bgimage( winbgimg, FL_ALIGN_CENTER );
         mainWindow->setcleartype( true );
 
         extern unsigned char pngimg_minimize[];
@@ -338,7 +334,7 @@ void wMain::createComponents()
             boxTrackNo->labelsize( 10 );
         }
 
-        boxTitle = new Fl_Box( cli_x + 10 , cli_y, test_w, 30 );
+        boxTitle = new Fl_Box( cli_x + 10 , cli_y, test_w, 25 );
         if ( boxTitle != NULL )
         {
             boxTitle->label( "No title" );
@@ -347,9 +343,9 @@ void wMain::createComponents()
             boxTitle->labelsize( 20 );
         }
 
-        cli_y += 30;
+        cli_y += 25;
 
-        boxAlbum = new Fl_Box( cli_x + 10 , cli_y, test_w, 20 );
+        boxAlbum = new Fl_Box( cli_x + 10 , cli_y, test_w, 18 );
         if ( boxAlbum != NULL )
         {
             boxAlbum->label( "No album" );
@@ -358,9 +354,9 @@ void wMain::createComponents()
             boxAlbum->labelsize( 14 );
         }
 
-        cli_y += 20;
+        cli_y += 18;
 
-        boxArtist = new Fl_Box( cli_x + 10 , cli_y, test_w, 20 );
+        boxArtist = new Fl_Box( cli_x + 10 , cli_y, test_w, 18 );
         if ( boxArtist != NULL )
         {
             boxArtist->label( "No artist" );
@@ -369,9 +365,9 @@ void wMain::createComponents()
             boxArtist->labelsize( 14 );
         }
 
-        cli_y += 20;
+        cli_y += 18;
 
-        boxMiscInfo = new Fl_Box( cli_x + 10 , cli_y, test_w, 20 );
+        boxMiscInfo = new Fl_Box( cli_x + 10 , cli_y, test_w, 15 );
         if ( boxMiscInfo != NULL )
         {
             boxMiscInfo->label( "No more information" );
@@ -380,9 +376,9 @@ void wMain::createComponents()
             boxMiscInfo->labelsize( 12 );
         }
 
-        cli_y += 20;
+        cli_y += 15;
 
-        boxFileInfo = new Fl_Box( cli_x + 10 , cli_y, test_w, 20 );
+        boxFileInfo = new Fl_Box( cli_x + 10 , cli_y, test_w, 15 );
         if ( boxFileInfo != NULL )
         {
             boxFileInfo->label( "No file information" );
@@ -391,15 +387,130 @@ void wMain::createComponents()
             boxFileInfo->labelsize( 12 );
         }
 
-        cli_y += 20;
+        cli_y += 15;
 
         // Last empty box for resize NULL container.
-        cli_y += 20;
-
-        Fl_Box* testempty = new Fl_Box(  cli_x , cli_y, cli_w, cli_h - cli_y );
+        // height = 5
+        Fl_Box* testempty = new Fl_Box(  cli_x , cli_y, cli_w, 5 );
         if ( testempty != NULL )
         {
             grpViewer->resizable( testempty );
+        }
+
+        cli_y += 5;
+
+        // Here control panel.
+        // Let make 5 pixel left for Fl_BorderlessWindow can size grip works.
+        cli_y = cli_h - 80 - 5;
+
+        grpControl = new Fl_Group( cli_x , cli_y, cli_w, 80 );
+        if ( grpControl != NULL )
+        {
+            grpControl->begin();
+
+            boxControlBG = new Fl_TransBox( grpControl->x(),
+                                            grpControl->y(),
+                                            grpControl->w(),
+                                            grpControl->h() );
+            if ( boxControlBG != NULL )
+            {
+                boxControlBG->color( 0 ); /// Black !
+                boxControlBG->set_alpha( 0x7F );
+            }
+
+            // Controls ...
+            // [ 1 ]  [ 2 ]  [ 3 ]
+            // 48x48, 64x64, 48x48
+
+            extern unsigned pngimg_ctrlplay_size;
+            extern unsigned char pngimg_ctrlplay[];
+            extern unsigned pngimg_ctrlstop_size;
+            extern unsigned char pngimg_ctrlstop[];
+            extern unsigned pngimg_ctrlprev_size;
+            extern unsigned char pngimg_ctrlprev[];
+            extern unsigned pngimg_ctrlnext_size;
+            extern unsigned char pngimg_ctrlnext[];
+
+            imgPlayCtrls[0] = new Fl_PNG_Image( "ctrlPlay",
+                                                pngimg_ctrlplay,
+                                                pngimg_ctrlplay_size );
+            imgPlayCtrls[1] = new Fl_PNG_Image( "ctrlStop",
+                                                pngimg_ctrlstop,
+                                                pngimg_ctrlstop_size );
+            imgPlayCtrls[2] = new Fl_PNG_Image( "ctrlPrev",
+                                                pngimg_ctrlprev,
+                                                pngimg_ctrlprev_size );
+            imgPlayCtrls[3] = new Fl_PNG_Image( "ctrlNext",
+                                                pngimg_ctrlnext,
+                                                pngimg_ctrlnext_size );
+
+            cli_y += ( grpControl->h() - 64 ) / 2;
+
+            int ctrlCenter = mainWindow->w() / 2;
+
+            int ctrlx = ctrlCenter - 32;
+
+            btnPlayStop = new Fl_FocusEffectButton( ctrlx, cli_y, 64, 64, "@>" );
+            if ( btnPlayStop != NULL )
+            {
+                btnPlayStop->drawparent( mainWindow->clientarea() );
+                btnPlayStop->box( FL_NO_BOX );
+                btnPlayStop->color( FL_BLACK, FL_BLACK );
+                btnPlayStop->align( FL_ALIGN_INSIDE | FL_ALIGN_CENTER );
+                btnPlayStop->clear_visible_focus();
+
+                if ( imgPlayCtrls[0] != NULL )
+                {
+                    btnPlayStop->image( imgPlayCtrls[0] );
+                    btnPlayStop->label( NULL );
+                }
+
+                btnPlayStop->callback( fl_w_cb, this );
+            }
+
+            int ctrly = cli_y + ( ( 64 - 48 ) / 2);
+
+            ctrlx = ctrlCenter - 32 - 64;
+
+            btnPrevTrk = new Fl_FocusEffectButton( ctrlx, ctrly, 48, 48, "@<<" );
+            if ( btnPrevTrk != NULL )
+            {
+                btnPrevTrk->drawparent( mainWindow->clientarea() );
+                btnPrevTrk->box( FL_NO_BOX );
+                btnPrevTrk->color( FL_BLACK, FL_BLACK );
+                btnPrevTrk->align( FL_ALIGN_INSIDE | FL_ALIGN_CENTER );
+                btnPrevTrk->clear_visible_focus();
+
+                if ( imgPlayCtrls[2] != NULL )
+                {
+                    btnPrevTrk->image( imgPlayCtrls[2] );
+                    btnPrevTrk->label( NULL );
+                }
+
+                btnPrevTrk->callback( fl_w_cb, this );
+            }
+
+            ctrlx = ctrlCenter + 32 + 16;
+
+            btnNextTrk = new Fl_FocusEffectButton( ctrlx, ctrly, 48, 48, "@>>");
+            if ( btnNextTrk != NULL )
+            {
+                btnNextTrk->drawparent( mainWindow->clientarea() );
+                btnNextTrk->box( FL_NO_BOX );
+                btnNextTrk->color( FL_BLACK, FL_BLACK );
+                btnNextTrk->align( FL_ALIGN_INSIDE | FL_ALIGN_CENTER );
+                btnNextTrk->clear_visible_focus();
+
+                if ( imgPlayCtrls[3] != NULL )
+                {
+                    btnNextTrk->image( imgPlayCtrls[3] );
+                    btnNextTrk->label( NULL );
+                }
+
+                btnNextTrk->callback( fl_w_cb, this );
+            }
+
+            grpControl->end();
         }
 
         // --------------------------
@@ -422,7 +533,8 @@ void wMain::createComponents()
             int pp_x = ( cli_w - pp_w ) / 2;
             int pp_y = ( cli_h - pp_h ) / 2;
 
-            Fl_Box* boxtest = new Fl_Box( cli_x + pp_x , cli_y + pp_y, pp_w, pp_h, "A\nTEST BOX\nHERE !" );
+            Fl_Box* boxtest = new Fl_Box( cli_x + pp_x , cli_y + pp_y, pp_w, pp_h,
+                                          "A\nTEST BOX\nHERE !" );
             if ( boxtest != NULL )
             {
                 boxtest->box( FL_NO_BOX );
@@ -437,7 +549,10 @@ void wMain::createComponents()
         mainWindow->callback( fl_w_cb, this );
         mainWindow->callback_onmove( fl_move_cb, this );
 
-        int min_w_h = ( DEF_APP_DEFAULT_H  / 3 ) * 2;
+        int min_w_h = mainWindow->clientarea_y()
+                      + boxCoverArt->h()
+                      + skbProgress->h()
+                      + 2;
 
         mainWindow->size_range( DEF_APP_DEFAULT_W, min_w_h, DEF_APP_DEFAULT_W );
 
@@ -457,6 +572,7 @@ void wMain::createComponents()
         mainWindow->show();
     }
 
+    setNoArtCover();
     applyThemes();
 }
 
@@ -555,15 +671,29 @@ void wMain::loadTags()
     updateInfo();
 }
 
-void wMain::updateInfo()
+void wMain::updateTrack()
 {
     char tmpmap[80] = {0};
 
     strinf_trackno.clear();
 
-    sprintf( tmpmap, "%03d/%03d", mp3queue + 1, mp3list.size() );
-    strinf_trackno = tmpmap;
+    if ( mp3list.size() > 0 )
+    {
+        sprintf( tmpmap, "%03d/%03d", mp3queue + 1, mp3list.size() );
+        strinf_trackno = tmpmap;
+    }
+    else
+    {
+        strinf_trackno = "000/000";
+    }
     boxTrackNo->label( strinf_trackno.c_str() );
+}
+
+void wMain::updateInfo()
+{
+    updateTrack();
+
+    char tmpmap[80] = {0};
 
     strtag_fileinfo.clear();
 
@@ -580,6 +710,237 @@ void wMain::updateInfo()
     strtag_fileinfo = tmpmap;
 
     boxFileInfo->label( strtag_fileinfo.c_str() );
+}
+
+void wMain::setNoArtCover()
+{
+    if ( imgNoArt == NULL )
+    {
+        extern unsigned pngimg_noart_size;
+        extern unsigned char pngimg_noart[];
+
+        Fl_PNG_Image* imgtmp = new Fl_PNG_Image( "noart", pngimg_noart, pngimg_noart_size );
+        if ( imgtmp != NULL )
+        {
+            imgNoArt = fl_imgtk::rescale( (Fl_RGB_Image*)imgtmp,
+                                          boxCoverArt->w(),
+                                          boxCoverArt->h(),
+                                          fl_imgtk::BILINEAR );
+
+            delete imgtmp;
+        }
+    }
+
+    fl_imgtk::discard_user_rgb_image( imgWinBG );
+
+    imgWinBG = fl_imgtk::makegradation_h( DEF_APP_DEFAULT_W, DEF_APP_DEFAULT_H,
+                                          0xCCCCCC00, 0x99999900, true );
+
+    mainWindow->color( 0xCCCCCC00 );
+    mainWindow->bgimage( imgWinBG, FL_ALIGN_CENTER );
+
+    mainWindow->labelcolor( colLabelNoArt );
+    boxArtist->labelcolor( colLabelNoArt );
+    boxAlbum->labelcolor( colLabelNoArt );
+    boxTitle->labelcolor( colLabelNoArt );
+    boxMiscInfo->labelcolor( colLabelNoArt );
+    boxFileInfo->labelcolor( colLabelNoArt );
+
+    boxTrackNo->labelcolor( fl_darker( colLabelNoArt ) );
+
+    if ( _mp3art_loaded == true )
+    {
+        for( unsigned cnt=0; cnt<4; cnt++ )
+        {
+            Fl_Image* pimg = mainWindow->controlbuttonsimage( cnt );
+            if ( pimg != NULL )
+            {
+                fl_imgtk::invert_ex( (Fl_RGB_Image*)pimg );
+            }
+        }
+    }
+
+    boxCoverArt->image( imgNoArt );
+
+    _mp3art_loaded = false;
+}
+
+void wMain::switchPlayButton( int state )
+{
+    if ( state > 1 )
+        return;
+
+    if ( btnPlayStop != NULL )
+    {
+        if ( imgPlayCtrls[state] != NULL )
+        {
+            btnPlayStop->image( imgPlayCtrls[state] );
+        }
+        else
+        {
+            switch( state )
+            {
+                case 0 : btnPlayStop->label( "@>" ); break;
+                case 1 : btnPlayStop->label( "@square" ); break;
+            }
+        }
+
+        btnPlayStop->redraw();
+    }
+}
+
+void wMain::loadPlayList()
+{
+    string dirpath;
+
+#ifdef DEBUG
+    dirpath = "./test";
+
+    DirSearch* dsearch = new DirSearch( dirpath.c_str(), ".mp3" );
+    if ( dsearch != NULL )
+    {
+        vector< string >* plist = dsearch->data();
+        if ( plist->size() > 0 )
+        {
+            for( unsigned cnt=0; cnt<plist->size(); cnt++ )
+            {
+                mp3list.push_back( plist->at( cnt ) );
+            }
+        }
+
+        delete dsearch;
+    }
+#endif // DEBUG
+
+    if ( _argc > 1 )
+    {
+        for( unsigned cnt=1; cnt<_argc; cnt++ )
+        {
+            if ( DirSearch::DirTest( _argv[1] ) == true )
+            {
+                dirpath = _argv[1];
+            }
+
+            DirSearch* dsearch = new DirSearch( dirpath.c_str(), ".mp3" );
+            if ( dsearch != NULL )
+            {
+                vector< string >* plist = dsearch->data();
+                if ( plist->size() > 0 )
+                {
+                    for( unsigned cnt=0; cnt<plist->size(); cnt++ )
+                    {
+                        mp3list.push_back( plist->at( cnt ) );
+                    }
+                }
+
+                delete dsearch;
+            }
+        }
+    }
+
+    // Let make shuttle LUT !
+    if ( mp3list.size() > 0 )
+    {
+        mp3listLUT.clear();
+        mp3listLUT.resize( mp3list.size() );
+
+        for( unsigned cnt=0; cnt<mp3list.size(); cnt++ )
+        {
+            mp3listLUT[ cnt ] = cnt;
+        }
+
+        std::random_shuffle( mp3listLUT.begin(), mp3listLUT.end() );
+    }
+
+    updateTrack();
+
+    mp3queue = 0;
+}
+
+void wMain::playControl( int action )
+{
+    if ( action > 3 )
+        return;
+
+    switch( action )
+    {
+        case 0 : /// PLAY
+            {
+                if ( mp3list.size() > 0 )
+                {
+                    if ( ( _mp3onplaying == false ) && ( _pt == NULL ) )
+                    {
+                        int ret = pthread_create( &_pt, NULL, pthread_work, this );
+                    }
+                }
+            }
+            break;
+
+        case 1: /// STOP.
+            {
+                if ( mp3list.size() > 0 )
+                {
+                    if ( ( _mp3onplaying == true ) && ( _pt != NULL ) )
+                    {
+                        // Wait for thread ends.
+                        if ( _threadkillswitch == false )
+                        {
+                            _threadkillswitch = true;
+                            Sleep( 200 );
+                            int retv = 0;
+                            pthread_join( _pt, NULL );
+                            _pt = NULL;
+
+                            _threadkillswitch = false;
+                            if ( mp3dec != NULL )
+                            {
+                                mp3dec->Close();
+                            }
+
+                            if ( aout != NULL )
+                            {
+                                aout->Control( AudioOut::STOP, 0, 0 );
+                            }
+
+                            _mp3onplaying = false;
+                        }
+                    }
+                }
+            }
+            break;
+
+        case 2: /// Previous Track
+            {
+                playControl( 1 );
+
+                if ( mp3queue == 0 )
+                {
+                    mp3queue = mp3list.size() - 1;
+                }
+                else
+                {
+                    mp3queue--;
+                }
+
+                playControl( 0 );
+            }
+            break;
+
+        case 3: /// Next Track
+            {
+                playControl( 1 );
+
+                mp3queue++;
+
+                if( mp3queue >= mp3list.size() )
+                {
+                    mp3queue = 0;
+                }
+
+                playControl( 0 );
+            }
+            break;
+    }
 }
 
 void wMain::loadArtCover()
@@ -601,10 +962,9 @@ void wMain::loadArtCover()
         return;
     }
 
-    unsigned artmasksz;
-    unsigned char* artmask = NULL;
+    extern unsigned artmasksz;
+    extern unsigned char artmask[];
 
-    getartmask( artmask, artmasksz );
 
     Fl_PNG_Image* amaskimg = new Fl_PNG_Image( "artmask", artmask, artmasksz );
     Fl_JPEG_Image* coverimg = new Fl_JPEG_Image( "art", img );
@@ -625,46 +985,50 @@ void wMain::loadArtCover()
         // Change background image with cover art.
         mainWindow->bgimage( NULL );
 
-        fl_imgtk::discard_user_rgb_image( winbgimg );
+        fl_imgtk::discard_user_rgb_image( imgWinBG );
 
         // Get Maximum size
         unsigned maxwh = max( mainWindow->w(), mainWindow->h() );
 
-        winbgimg = fl_imgtk::rescale( (Fl_RGB_Image*)coverimg,
+        imgWinBG = fl_imgtk::rescale( (Fl_RGB_Image*)coverimg,
                                       maxwh, maxwh,
                                       fl_imgtk::NONE );
 
-        if ( winbgimg != NULL )
+        if ( imgWinBG != NULL )
         {
-            fl_imgtk::blurredimage_ex( winbgimg, 10 );
-            fl_imgtk::brightbess_ex( winbgimg, -80.f );
+            fl_imgtk::blurredimage_ex( imgWinBG, 10 );
+            fl_imgtk::brightbess_ex( imgWinBG, -80.f );
 
-            mainWindow->bgimage( winbgimg, FL_ALIGN_CENTER );
+            mainWindow->color( FL_BLACK );
+            mainWindow->bgimage( imgWinBG, FL_ALIGN_CENTER );
 
             // No need get illumination, it always draws bright color.
-            Fl_Color newcol = 0xCFCFCFFF;
+            mainWindow->labelcolor( colLabelArt );
+            boxArtist->labelcolor( colLabelArt );
+            boxAlbum->labelcolor( colLabelArt );
+            boxTitle->labelcolor( colLabelArt );
+            boxMiscInfo->labelcolor( colLabelArt );
+            boxFileInfo->labelcolor( colLabelArt );
 
-            mainWindow->labelcolor( newcol );
-            boxArtist->labelcolor( newcol );
-            boxAlbum->labelcolor( newcol );
-            boxTitle->labelcolor( newcol );
-            boxMiscInfo->labelcolor( newcol );
-            boxFileInfo->labelcolor( newcol );
+            boxTrackNo->labelcolor( fl_darker( colLabelArt ) );
 
-            boxTrackNo->labelcolor( fl_darker( newcol ) );
-
-            for( unsigned cnt=0; cnt<4; cnt++ )
+            if ( _mp3art_loaded == false )
             {
-                Fl_Image* pimg = mainWindow->controlbuttonsimage( cnt );
-                if ( pimg != NULL )
+                for( unsigned cnt=0; cnt<4; cnt++ )
                 {
-                    fl_imgtk::invert_ex( (Fl_RGB_Image*)pimg );
+                    Fl_Image* pimg = mainWindow->controlbuttonsimage( cnt );
+                    if ( pimg != NULL )
+                    {
+                        fl_imgtk::invert_ex( (Fl_RGB_Image*)pimg );
+                    }
                 }
             }
 
             mainWindow->refreshcontrolbuttonsimages();
 
             mainWindow->redraw();
+
+            _mp3art_loaded = true;
         }
 
         delete amaskimg;
@@ -685,6 +1049,20 @@ void wMain::loadArtCover()
 
         fl_imgtk::discard_user_rgb_image( rsdmask );
         fl_imgtk::discard_user_rgb_image( rsdart );
+    }
+    else
+    {
+        if ( amaskimg != NULL )
+        {
+            delete amaskimg;
+        }
+
+        if ( coverimg != NULL )
+        {
+            delete coverimg;
+        }
+
+        setNoArtCover();
     }
 }
 
@@ -718,6 +1096,11 @@ unsigned wMain::image_color_illum( Fl_RGB_Image* img )
     return 0;
 }
 
+void wMain::requestWindowRedraw()
+{
+    Fl::repeat_timeout( 0.1f, fl_redraw_timer_cb, this );
+}
+
 void wMain::applyThemes()
 {
     rkrawv::InitTheme();
@@ -731,6 +1114,57 @@ void wMain::applyThemes()
 
 void wMain::WidgetCB( Fl_Widget* w )
 {
+    if ( w == btnPlayStop )
+    {
+        _mp3controlstate = 1;
+
+        btnPlayStop->deactivate();
+
+        if ( mp3list.size() > 0 )
+        {
+            if ( _mp3onplaying == false )
+            {
+                playControl( 0 );
+            }
+            else
+            {
+                playControl( 1 );
+                switchPlayButton( 0 );
+            }
+        }
+
+        btnPlayStop->activate();
+
+        _mp3controlstate = 0;
+        return;
+    }
+
+    if ( w == btnPrevTrk )
+    {
+        btnPrevTrk->deactivate();
+
+        if ( mp3list.size() > 0 )
+        {
+            playControl( 2 );
+        }
+
+        btnPrevTrk->activate();
+        return;
+    }
+
+    if ( w == btnNextTrk )
+    {
+        btnNextTrk->deactivate();
+
+        if ( mp3list.size() > 0 )
+        {
+            playControl( 3 );
+        }
+
+        btnNextTrk->activate();
+        return;
+    }
+
     if ( w == mainWindow )
     {
         fl_message_title( "Program quit" );
@@ -738,16 +1172,7 @@ void wMain::WidgetCB( Fl_Widget* w )
 
         if ( retask > 0 )
         {
-            // Wait for thread ends.
-
-            if ( ( _pt != NULL ) && ( _threadkillswitch == false ) )
-            {
-                _threadkillswitch = true;
-                printf("Wait for thread ends ...");
-                //pthread_kill( _pt, 0 );
-                pthread_join( _pt, 0 );
-                printf("Ok.\n");
-            }
+            playControl( 1 );
 
             mainWindow->hide();
             delete mainWindow;
@@ -775,7 +1200,8 @@ void wMain::OnNewBuffer( unsigned position, unsigned nbsz, unsigned maxposition 
 
         skbProgress->update();
         skbProgress->redraw();
-        Fl::flush();
+        mainWindow->redraw();
+        requestWindowRedraw();
     }
 }
 
@@ -791,26 +1217,15 @@ void wMain::OnBufferEnd()
         aout->Control( AudioOut::STOP, 0, 0 );
     }
 
-    //printf("audio buffer finished.\n");
-    if ( ( _pt != NULL ) && ( _threadkillswitch == false ) )
+    playControl( 1 );
+
+    _mp3onplaying = false;
+    _threadkillswitch = false;
+
+    if ( _mp3controlstate == 0 )
     {
-        _threadkillswitch = true;
-        //pthread_kill( _pt, 0 );
-        pthread_join( _pt, 0 );
-        _pt = NULL;
-    }
-
-    if ( mp3list.size() > 0 )
-    {
-        mp3queue++;
-        if ( mp3queue >= mp3list.size() )
-        {
-            mp3queue = 0;
-        }
-
-        _threadkillswitch = false;
-
-        int ret = pthread_create( &_pt, NULL, pthread_work, this );
+        // Next track.
+        playControl( 2 );
     }
 }
 
@@ -834,6 +1249,24 @@ void fl_move_cb( Fl_Widget* w, void* p )
     {
         wMain* wm = (wMain*)p;
         wm->MoveCB( w );
+    }
+}
+
+void fl_redraw_timer_cb( void* p )
+{
+    // Simple mutex.
+    static bool isflushing = false;
+
+    if ( isflushing == false )
+    {
+        isflushing = true;
+
+        if ( p != NULL )
+        {
+            Fl::flush();
+        }
+
+        isflushing = false;
     }
 }
 

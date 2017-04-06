@@ -14,6 +14,10 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
+const char* reffntshape = NULL;
+
+////////////////////////////////////////////////////////////////////////////////
+
 void procAutoLocale()
 {
     LANGID currentUIL = GetSystemDefaultLangID();
@@ -28,18 +32,27 @@ void procAutoLocale()
     {
         case LANG_KOREAN:
             convLoc = "korean";
+            reffntshape = "Malgun Gothic";
             break;
 
         case LANG_JAPANESE:
             convLoc = "japanese";
+            reffntshape = "Meiryo";
             break;
 
-        case LANG_CHINESE:
-            convLoc = "chinese";
+        case LANG_CHINESE_SIMPLIFIED:
+            convLoc = "chinese-simplified";
+            reffntshape = "Microsoft YaHei";
+            break;
+
+        case LANG_CHINESE_TRADITIONAL:
+            convLoc = "chinese-traditional";
+            reffntshape = "Microsoft JhengHei";
             break;
 
         default:
             convLoc = "C";
+            reffntshape = "Tahoma";
             break;
     }
 
@@ -48,7 +61,7 @@ void procAutoLocale()
 
 void presetFLTKenv()
 {
-    Fl::set_font( FL_FREE_FONT, "Tahoma" );
+    Fl::set_font( FL_FREE_FONT, reffntshape );
     Fl_Double_Window::default_xclass( DEF_APP_CLSNAME );
 
     fl_message_font_ = FL_FREE_FONT;
@@ -66,14 +79,13 @@ int main (int argc, char ** argv)
 {
     int reti = 0;
 
+    procAutoLocale();
     presetFLTKenv();
 
     wMain* pWMain = new wMain( argc, argv );
 
     if ( pWMain != NULL )
     {
-        procAutoLocale();
-
         reti = pWMain->Run();
     }
 

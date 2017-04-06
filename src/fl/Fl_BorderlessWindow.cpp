@@ -434,10 +434,12 @@ Fl_BorderlessWindow::Fl_BorderlessWindow( int W, int H, const char* T )
         }
     }
 
-    grpInnerWindow = new Fl_Group( 1, box_wh + 1, W - 2, H - box_wh - 2 );
+    grpInnerWindow = new Fl_Group( 1, fbwGroupTitleDivAll->h(),
+                                   W - 2, H - fbwGroupTitleDivAll->h() );
     if ( grpInnerWindow != NULL )
     {
         grpInnerWindow->align( FL_ALIGN_CLIP | FL_ALIGN_INSIDE );
+        grpInnerWindow->end();
         this->resizable( grpInnerWindow );
     }
 
@@ -501,6 +503,9 @@ void Fl_BorderlessWindow::size_range(int minw, int minh, int maxw, int maxh)
 
 void Fl_BorderlessWindow::draw()
 {
+    fl_color( Fl_Double_Window::color() );
+    fl_rectf( 0, 0, w(), h() );
+
     Fl_Image* drawimg = backgroundimg;
 
     if ( backgroundimgcached != NULL )
@@ -538,6 +543,19 @@ void Fl_BorderlessWindow::draw()
     }
 
     Fl_Double_Window::draw();
+
+#ifdef DEBUG_FL_BORDERWINDOW_DRAWING_REGION_CHECK
+    fl_color( FL_BLUE );
+    fl_rect( 0, 0, w() - 2, h() - 2 );
+    fl_line( 1, 1, w() - 2, h() - 2 );
+
+    fl_color( FL_RED );
+    fl_rect( grpInnerWindow->x(), grpInnerWindow->y(),
+             grpInnerWindow->w(), grpInnerWindow->h() );
+    fl_line( grpInnerWindow->x(), grpInnerWindow->y(),
+             grpInnerWindow->x() + grpInnerWindow->w(),
+             grpInnerWindow->y() + grpInnerWindow->h() );
+#endif // DEBUG
 }
 
 void Fl_BorderlessWindow::procdblclktitle()
@@ -1113,6 +1131,22 @@ void Fl_BorderlessWindow::WCB( Fl_Widget* w )
         do_callback();
         return;
     }
+}
+
+void Fl_BorderlessWindow::clientarea_sizes( int &x, int &y, int &w, int &h )
+{
+    if ( grpInnerWindow != NULL )
+    {
+        x = grpInnerWindow->x();
+        y = grpInnerWindow->y();
+        w = grpInnerWindow->w();
+        h = grpInnerWindow->h();
+    }
+
+    x = this->x();
+    y = this->y();
+    w = this->w();
+    h = this->h();
 }
 
 int Fl_BorderlessWindow::clientarea_x()

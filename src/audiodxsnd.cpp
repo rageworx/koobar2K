@@ -91,7 +91,19 @@ AudioDXSound::~AudioDXSound()
 AudioOut::AResult AudioDXSound::InitAudio( unsigned chl, unsigned freq )
 {
     if ( _inited == true )
+    {
+        if ( _channels != chl )
+        {
+            _channels = chl;
+        }
+
+        if ( _frequency != freq )
+        {
+            _frequency = freq;
+        }
+
         return ALEADYINITED;
+    }
 
     if ( pDSnd != NULL )
         return FAIL;
