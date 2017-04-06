@@ -34,6 +34,7 @@ class wMain : public AudioOutEvent
         void  WidgetCB( Fl_Widget* w );
         void  MenuCB( Fl_Widget* w );
         void  MoveCB( Fl_Widget* w );
+        void  DelayedWorkCB();
 
     private:
         ~wMain();

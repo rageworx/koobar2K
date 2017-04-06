@@ -40,6 +40,7 @@ using namespace fl_imgtk;
 void fl_w_cb( Fl_Widget* w, void* p );
 void fl_move_cb( Fl_Widget* w, void* p );
 void fl_redraw_timer_cb( void* p );
+void fl_delayed_work_timer_cb( void* p );
 
 void* pthread_work( void* p );
 
@@ -138,6 +139,11 @@ int wMain::Run()
     _threadkillswitch = false;
 
     loadPlayList();
+
+    if ( mp3list.size() > 0 )
+    {
+        Fl::add_timeout( 0.1f, fl_delayed_work_timer_cb, this );
+    }
 
     return Fl::run();
 }
@@ -1187,6 +1193,11 @@ void wMain::MoveCB( Fl_Widget* w )
 {
 }
 
+void wMain::DelayedWorkCB()
+{
+    playControl( 0 );
+}
+
 void wMain::OnNewBuffer( unsigned position, unsigned nbsz, unsigned maxposition )
 {
     //printf("audio new buffer at %d + %d bytes \n", position, nbsz );
@@ -1269,6 +1280,18 @@ void fl_redraw_timer_cb( void* p )
         isflushing = false;
     }
 }
+
+void fl_delayed_work_timer_cb( void* p )
+{
+    if ( p != NULL )
+    {
+        wMain* wm = (wMain*)p;
+        wm->DelayedWorkCB();
+    }
+
+    Fl::remove_timeout( fl_delayed_work_timer_cb );
+}
+
 
 void* pthread_work( void* p )
 {

@@ -17,10 +17,12 @@ using namespace std;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#define DEF_ADXS_BUFFERS                2
+#define DEF_ADXS_BUFFERLIMIT            (DEF_ADXS_BUFFERS-1)
 #define DEF_ADXS_RESERVE_BUFF_SZ        50 * 1024 * 1024
 #define DEF_ADXS_MIN_PLAYBUFF_SZ        256 * 1024
 //#define DEF_ADXS_MIN_NEXT_SZ            384
-#define DEF_ADXS_MIN_NEXT_SZ            32
+#define DEF_ADXS_MIN_NEXT_SZ            64
 
 #define TIME_PER_SAMPLE( _s_ )          ( 1.0f / (float)_s_ )
 
@@ -71,8 +73,10 @@ AudioDXSound::AudioDXSound( HWND hParent, AudioOutEvent* e  )
    _currentbufferque( 0 ),
    _threadkeeplived( true )
 {
-    _dxbuff[0] = NULL;
-    _dxbuff[1] = NULL;
+    for( unsigned cnt=0; cnt<DEF_ADXS_BUFFERS; cnt++ )
+    {
+        _dxbuff[ cnt ] = NULL;
+    }
 }
 
 AudioDXSound::~AudioDXSound()
@@ -151,7 +155,7 @@ AudioOut::AResult AudioDXSound::FinalAudio()
 
         for( unsigned cnt=0; cnt<2; cnt++ )
         {
-            DXBufferState* remdxb = (DXBufferState*)_dxbuff[ cnt ];
+            DXBufferState* remdxb = (DXBufferState*)&_dxbuff[ cnt ];
 
             if ( remdxb != NULL )
             {
@@ -201,16 +205,15 @@ AudioOut::AResult AudioDXSound::WriteBuffer( const unsigned char* buffer, unsign
 
         if ( _currentbufferque == 0 )
         {
-            // Wait size filled in double buffered.
+            // Create buffers for play.
             unsigned bsz = _buffer.size();
-            unsigned dsz = DEF_ADXS_MIN_PLAYBUFF_SZ * 2;
+            unsigned dsz = DEF_ADXS_MIN_PLAYBUFF_SZ * DEF_ADXS_BUFFERS;
             if ( bsz > dsz )
             {
-                createNextBuffer();
-                createNextBuffer();
-#ifdef DEBUG
-                printf( "buffer size = %d, cached.\n", bsz );
-#endif // DEBUG
+                for( unsigned cnt=0; cnt<DEF_ADXS_BUFFERS; cnt++)
+                {
+                    createNextBuffer();
+                }
             }
         }
 
@@ -295,11 +298,11 @@ void* AudioDXSound::ThreadCall()
                 bool islastend = false;
                 bool neednextbuff = false;
 
-                DXBufferState* beremoved = (DXBufferState*)_dxbuff[ _dxbidx_r ];
+                DXBufferState* playedbuff = (DXBufferState*)_dxbuff[ _dxbidx_r ];
 
                 // Switch buffer index.
                 _dxbidx_r++;
-                if ( _dxbidx_r > 1 )
+                if ( _dxbidx_r > DEF_ADXS_BUFFERLIMIT )
                 {
                     _dxbidx_r = 0;
                 }
@@ -331,14 +334,12 @@ void* AudioDXSound::ThreadCall()
                     }
                 }
 
-                if ( beremoved != NULL )
+                if ( playedbuff != NULL )
                 {
                     // Make Volume to Zero for removing popping noise !
-                    // beremoved->pdxbuffer->SetVolume( 0 );
-                    // beremoved->pdxbuffer->Stop();
-                    beremoved->status = PLAYED;
+                    playedbuff->status = PLAYED;
 
-                    if ( beremoved->endofbuffer == false )
+                    if ( playedbuff->endofbuffer == false )
                     {
                         // Generate next buffer.
                         createNextBuffer();
@@ -376,16 +377,22 @@ bool AudioDXSound::createNextBuffer( bool flushleft )
         _dxbidx_w = 0;
     }
 
-    unsigned buffsz = DEF_ADXS_MIN_PLAYBUFF_SZ;
+    unsigned buffsz = DEF_ADXS_MIN_PLAYBUFF_SZ + DEF_ADXS_MIN_NEXT_SZ;
     bool islastbuff = false;
 
     if ( _dxbuff[ _dxbidx_w ] == NULL )
     {
+#ifdef DEBUG
         printf( "new buff index of _dxbidx_w = %d\n", _dxbidx_w );
+#endif // DEBUG
 
-        if ( ( _currentbufferque + buffsz ) > curbuffsz )
+        unsigned realbuffsz = buffsz - DEF_ADXS_MIN_NEXT_SZ;
+        unsigned cbbuffpos  = realbuffsz - DEF_ADXS_MIN_NEXT_SZ;
+
+        if ( ( _currentbufferque + realbuffsz ) > curbuffsz )
         {
             buffsz = curbuffsz - _currentbufferque;
+            cbbuffpos = buffsz;
             islastbuff = true;
         }
 
@@ -406,12 +413,7 @@ bool AudioDXSound::createNextBuffer( bool flushleft )
                                           (void**)&pDsNotify );
             if ( hr == DS_OK )
             {
-                DWORD offsz = buffsz - DEF_ADXS_MIN_NEXT_SZ;
-                if ( ( (long long)buffsz - DEF_ADXS_MIN_NEXT_SZ) < 0 )
-                {
-                    offsz = buffsz;
-                }
-
+                DWORD offsz = cbbuffpos;
                 PositionNotify.dwOffset = offsz;
                 PositionNotify.hEventNotify = hEventBuffer;
 
@@ -435,10 +437,17 @@ bool AudioDXSound::createNextBuffer( bool flushleft )
 
                 _dxbuff[ _dxbidx_w ] = (void*)dxbs;
 
-                _currentbufferque += buffsz;
+                if ( realbuffsz < buffsz )
+                {
+                    _currentbufferque += realbuffsz;
+                }
+                else
+                {
+                    _currentbufferque += buffsz;
+                }
 
                 _dxbidx_w++;
-                if ( _dxbidx_w > 1 )
+                if ( _dxbidx_w > DEF_ADXS_BUFFERLIMIT )
                 {
                     _dxbidx_w = 0;
                 }
@@ -463,6 +472,9 @@ bool AudioDXSound::createNextBuffer( bool flushleft )
         printf( "resued buff index of _dxbidx_w = %d\n", _dxbidx_w );
 
         DXBufferState* dxbs = (DXBufferState* )_dxbuff[ _dxbidx_w ];
+
+        if ( dxbs == NULL )
+            return false;
 
         if ( ( dxbs->status == BUFFERED ) || ( dxbs->status == PLAYING ) )
             return false;
@@ -495,7 +507,7 @@ bool AudioDXSound::createNextBuffer( bool flushleft )
         _currentbufferque += buffsz;
 
         _dxbidx_w++;
-        if ( _dxbidx_w > 1 )
+        if ( _dxbidx_w > DEF_ADXS_BUFFERLIMIT )
         {
             _dxbidx_w = 0;
         }
@@ -520,24 +532,31 @@ bool AudioDXSound::procPlay()
 {
     if ( _played == false )
     {
-        if ( ( _dxbuff[0] != NULL ) && ( _dxbuff[1] != NULL ) )
+        unsigned bufferedcnt = 0;
+
+        for( unsigned cnt=0; cnt<DEF_ADXS_BUFFERS; cnt++ )
         {
-            DXBufferState* pdxbs[2] = { (DXBufferState*)_dxbuff[0],
-                                        (DXBufferState*)_dxbuff[1] };
+            DXBufferState* pdxb = (DXBufferState*)_dxbuff[ cnt ];
 
-            if ( ( pdxbs[0]->status == BUFFERED ) &&
-                 ( pdxbs[1]->status == BUFFERED ) )
+            if ( pdxb != NULL )
             {
-                if ( pdxbs[0] != NULL )
+                if ( pdxb->status == BUFFERED )
                 {
-                    pdxbs[0]->pdxbuffer->Play( 0, 0, 0 );
-                    pdxbs[0]->status = PLAYED;
-
-                    _played = true;
-
-                    return true;
+                    bufferedcnt++;
                 }
             }
+        }
+
+        if ( bufferedcnt > DEF_ADXS_BUFFERLIMIT )
+        {
+            DXBufferState* pdxb = (DXBufferState*)_dxbuff[ 0 ];
+
+            pdxb->pdxbuffer->Play( 0, 0, 0 );
+            pdxb->status = PLAYED;
+
+            _played = true;
+
+            return true;
         }
     }
 
