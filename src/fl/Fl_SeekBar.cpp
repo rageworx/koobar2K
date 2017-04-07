@@ -144,20 +144,17 @@ void Fl_SeekBar::updateImage()
             {
                 uchar* pptr = &refp[ ( w() * ( lposy - 1 ) + cnt ) * 4 ];
                 pptr[ 0 ] = 0xFF;
-                pptr[ 1 ] = 0x55;
-                pptr[ 2 ] = 0x55;
-                pptr[ 3 ] = 0x4F;
+                pptr[ 1 ] = 0xFF;
+                pptr[ 2 ] = 0xFF;
+                pptr[ 3 ] = 0x3F;
 
                 pptr = &refp[ ( w() * ( lposy + 1 ) + cnt ) * 4 ];
                 pptr[ 0 ] = 0xFF;
-                pptr[ 1 ] = 0x55;
-                pptr[ 2 ] = 0x55;
-                pptr[ 3 ] = 0x4F;
+                pptr[ 1 ] = 0xFF;
+                pptr[ 2 ] = 0xFF;
+                pptr[ 3 ] = 0x3F;
 
                 pptr = &refp[ ( w() * lposy + cnt ) * 4 ];
-                pptr[ 0 ] = 0xFF;
-                pptr[ 1 ] = 0x55;
-                pptr[ 2 ] = 0x55;
                 pptr[ 3 ] = 0xAF;
             }
         }

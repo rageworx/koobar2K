@@ -312,6 +312,35 @@ unsigned Fl_BorderlessWindowTitle::getcurrenttimems()
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
+int Fl_BorderlessDropServer::handle( int e )
+{
+    if ( _parent != NULL )
+    {
+        switch ( e )
+        {
+            case FL_DND_ENTER:          // return(1) for these events to 'accept' dnd
+            case FL_DND_DRAG:
+            case FL_DND_RELEASE:
+                return 1;
+                break;
+
+            case FL_LEAVE:
+                hide();
+                break;
+
+            case FL_PASTE:
+                return _parent->dohandle( e );
+        }
+
+        return Fl_Box::handle( e );
+    }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
 Fl_BorderlessWindow::Fl_BorderlessWindow( int W, int H, const char* T )
  : Fl_Double_Window( W, H, T ),
    boxWindowIcon( NULL ),
@@ -322,12 +351,22 @@ Fl_BorderlessWindow::Fl_BorderlessWindow( int W, int H, const char* T )
    maximized_wh( false ),
    singlewindowtype( 0 ),
    cbOnMove( NULL ),
+   pdOnMove( NULL ),
+   cbOnSized( NULL ),
+   pdOnSized( NULL ),
+   cbOnDrop( NULL ),
+   pdOnDrop( NULL ),
    defaultboxtype( FL_NO_BOX ),
    min_w( 0 ),
    min_h( 0 ),
    max_w( 0 ),
    max_h( 0 ),
    realshown( 0 ),
+   sizelocked( false ),
+   dragdropenabled( true ),
+   dragdroping( false ),
+   ddropServer( NULL ),
+   ddropfiles( NULL ),
    backgroundimg( NULL ),
    convtitleiconimg( NULL ),
    backgroundimgcached( NULL )
@@ -443,6 +482,12 @@ Fl_BorderlessWindow::Fl_BorderlessWindow( int W, int H, const char* T )
         this->resizable( grpInnerWindow );
     }
 
+    ddropServer = new Fl_BorderlessDropServer( 0, 0, W, H, this );
+    if ( ddropServer != NULL )
+    {
+        ddropServer->hide();
+    }
+
     Fl_Double_Window::end();
 
     begin();
@@ -450,6 +495,11 @@ Fl_BorderlessWindow::Fl_BorderlessWindow( int W, int H, const char* T )
 
 Fl_BorderlessWindow::~Fl_BorderlessWindow()
 {
+    if ( ddropServer != NULL )
+    {
+        delete ddropServer;
+    }
+
     releaseconvtitleiconimg();
 
     for( unsigned cnt=0; cnt<4; cnt++ )
@@ -463,6 +513,11 @@ Fl_BorderlessWindow::~Fl_BorderlessWindow()
     if ( backgroundimgcached != NULL )
     {
         fl_imgtk::discard_user_rgb_image( backgroundimgcached );
+    }
+
+    if ( ddropfiles != NULL )
+    {
+        free( ddropfiles );
     }
 }
 
@@ -480,6 +535,8 @@ void Fl_BorderlessWindow::end()
     {
         grpInnerWindow->end();
     }
+
+    reorders();
 }
 
 void Fl_BorderlessWindow::size_range(int minw, int minh, int maxw, int maxh)
@@ -680,7 +737,7 @@ void Fl_BorderlessWindow::titleicon( HICON i )
 
 int Fl_BorderlessWindow::handle( int e )
 {
-    int reti = Fl_Double_Window::handle( e );
+    int reti = 0;
 
     static int wsz_x = 0;
     static int wsz_y = 0;
@@ -689,6 +746,58 @@ int Fl_BorderlessWindow::handle( int e )
 
     switch( e )
     {
+        case FL_DND_ENTER:
+        case FL_DND_DRAG:
+            if ( dragdropenabled == true )
+            {
+                if ( dragdroping == false )
+                {
+                    dragdroping = true;
+                    ddropServer->show();
+                }
+                return 1;
+            }
+            break;
+
+        case FL_DND_LEAVE:
+        case FL_DND_RELEASE:
+            if ( dragdropenabled == true )
+            {
+                if ( dragdroping  == true )
+                {
+                    dragdroping = false;
+                    ddropServer->hide();
+                }
+                return 1;
+            }
+            break;
+
+        case FL_PASTE:
+            if ( dragdropenabled == true )
+            {
+                dragdroping = false;
+
+                if ( ddropfiles != NULL )
+                {
+                    free( ddropfiles );
+                }
+
+                if ( Fl::event_text() != NULL )
+                {
+                    ddropfiles = strdup( Fl::event_text() );
+                }
+
+                ddropServer->hide();
+
+                if ( cbOnDrop != NULL )
+                {
+                    cbOnDrop( this, pdOnDrop );
+                }
+
+                return 1;
+            }
+            break;
+
         case FL_PUSH:
             {
                 int cur_x = Fl::event_x();
@@ -710,6 +819,10 @@ int Fl_BorderlessWindow::handle( int e )
 
         case FL_RELEASE:
         case FL_LEAVE:
+            if ( ( dragdropenabled == true ) && ( dragdroping == true ) )
+            {
+                dragdroping = false;
+            }
             if ( sizegripped == true )
             {
                 sizegripped = false;
@@ -722,10 +835,17 @@ int Fl_BorderlessWindow::handle( int e )
 
                 regenbgcache( wsz_w, wsz_h );
                 redraw();
+
+                if ( cbOnSized != NULL )
+                {
+                    cbOnSized( this, pdOnSized );
+                }
+
             }
             break;
 
         case FL_MOVE:
+            if ( dragdroping == false )
             {
                 int cur_x = Fl::event_x();
                 int cur_y = Fl::event_y();
@@ -811,6 +931,7 @@ int Fl_BorderlessWindow::handle( int e )
 
                     // normal window style ...
                     style = GetWindowLong( hWindow, GWL_STYLE );
+                    style &= ~WS_POPUP;
                     style |= CS_DROPSHADOW;
 
                     SetWindowLong( hWindow, GWL_STYLE, style );
@@ -819,13 +940,13 @@ int Fl_BorderlessWindow::handle( int e )
                     style = GetWindowLong( hWindow, GWL_EXSTYLE );
 
                     style &= ~WS_EX_TOOLWINDOW;
-                    //style |= WS_VISIBLE | WS_EX_LAYERED;
+                    style |= WS_EX_LAYERED;
                     style |= WS_VISIBLE;
 
                     SetWindowLong( hWindow, GWL_EXSTYLE, style);
 
-                    // Make black (0x00000000) becomes transparent ...
-                    // SetLayeredWindowAttributes(hWindow, 0x00000000, 255, LWA_COLORKEY);
+                    //Make black (0x00000000) becomes transparent ...
+                    SetLayeredWindowAttributes(hWindow, 0x00000011, 255, LWA_COLORKEY);
 
                     ShowWindow( hWindow, SW_SHOW );
                 }
@@ -835,6 +956,8 @@ int Fl_BorderlessWindow::handle( int e )
             break;
 
     }
+
+    reti = Fl_Double_Window::handle( e );
 
     return reti;
 }
@@ -892,6 +1015,26 @@ void Fl_BorderlessWindow::regenbgcache( int w, int h )
     }
 }
 
+void Fl_BorderlessWindow::reorders()
+{
+    // reorder ...
+    Fl_Widget** a = (Fl_Widget**)array();
+
+    if ( a[ children() - 1 ] != ddropServer )
+    {
+        int i,j;
+        for (i = j = 0; j < children(); j++)
+        {
+            if ( a[j] != ddropServer )
+            {
+                a[i++] = a[j];
+            }
+        }
+
+        a[i++] = ddropServer;
+    }
+}
+
 void Fl_BorderlessWindow::setsinglewindow( int stype )
 {
     int cmax = 2;
@@ -920,23 +1063,6 @@ void Fl_BorderlessWindow::setsinglewindow( int stype )
                                 new_w,
                                 boxWindowTitle->h() );
     }
-
-#ifdef _WIN32
-        // A Fake way for FLTK,
-        HWND hWindow = fl_xid( this );
-        if ( hWindow != NULL )
-        {
-            ShowWindow(hWindow, SW_HIDE);
-
-            long style = GetWindowLong(hWindow, GWL_EXSTYLE);
-
-            style &= ~WS_VISIBLE;
-            style |= WS_EX_TOOLWINDOW;
-
-            SetWindowLong(hWindow, GWL_EXSTYLE, style);
-            ShowWindow( hWindow, SW_SHOW );
-        }
-#endif // _WIN32
 
     max_w = min_w;
     max_h = min_h;
@@ -1045,6 +1171,16 @@ void Fl_BorderlessWindow::enlarge()
             boxWindowButtons[1]->do_callback();
         }
     }
+}
+
+void Fl_BorderlessWindow::locksizing()
+{
+    sizelocked = true;
+}
+
+void Fl_BorderlessWindow::unlocksizing()
+{
+    sizelocked = false;
 }
 
 void Fl_BorderlessWindow::WCB( Fl_Widget* w )

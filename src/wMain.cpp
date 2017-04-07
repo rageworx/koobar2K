@@ -39,10 +39,32 @@ using namespace fl_imgtk;
 
 void fl_w_cb( Fl_Widget* w, void* p );
 void fl_move_cb( Fl_Widget* w, void* p );
+void fl_sized_cb( Fl_Widget* w, void* p );
+void fl_ddrop_cb( Fl_Widget* w, void* p );
 void fl_redraw_timer_cb( void* p );
 void fl_delayed_work_timer_cb( void* p );
 
-void* pthread_work( void* p );
+void* pthread_play( void* p );
+
+////////////////////////////////////////////////////////////////////////////////
+
+vector<string> split_string( const string& str, const string& delimiter )
+{
+    vector<string> strings;
+
+    string::size_type pos = 0;
+    string::size_type prev = 0;
+
+    while ( (pos = str.find(delimiter, prev)) != string::npos )
+    {
+        strings.push_back(str.substr(prev, pos - prev));
+        prev = pos + 1;
+    }
+
+    strings.push_back(str.substr(prev));
+
+    return strings;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -56,9 +78,10 @@ wMain::wMain( int argc, char** argv )
    //testswitch( NULL ),
    _mp3art_loaded( false),
    _mp3onplaying( false ),
-   _mp3controlstate( -1 ),
+   _mp3controlnext( -1 ),
    imgWinBG( NULL ),
    imgNoArt( NULL ),
+   imgOverlayBg( NULL ),
    aout( NULL )
 {
     parseParams();
@@ -122,6 +145,7 @@ wMain::wMain( int argc, char** argv )
 
 wMain::~wMain()
 {
+
     // Removing timer.
     Fl::remove_timeout( fl_redraw_timer_cb );
 
@@ -132,17 +156,40 @@ wMain::~wMain()
 
         delete aout;
     }
+
+    for( unsigned cnt=0; cnt<4; cnt++ )
+    {
+        fl_imgtk::discard_user_rgb_image( imgPlayCtrls[cnt] );
+    }
+
+    fl_imgtk::discard_user_rgb_image( imgWinBG );
+    fl_imgtk::discard_user_rgb_image( imgNoArt );
+    fl_imgtk::discard_user_rgb_image( imgOverlayBg );
 }
 
 int wMain::Run()
 {
     _threadkillswitch = false;
 
-    loadPlayList();
+#ifdef DEBUG
+    makePlayList( "./test" );
+#endif // DEBUG
+
+    if ( _argc > 1 )
+    {
+        for( unsigned cnt=1; cnt<_argc; cnt++ )
+        {
+            if ( DirSearch::DirTest( _argv[cnt] ) == true )
+            {
+                makePlayList( _argv[cnt] );
+            }
+        }
+    }
 
     if ( mp3list.size() > 0 )
     {
-        Fl::add_timeout( 0.1f, fl_delayed_work_timer_cb, this );
+        mainWindow->deactivate();
+        Fl::add_timeout( 0.5f, fl_delayed_work_timer_cb, this );
     }
 
     return Fl::run();
@@ -154,14 +201,6 @@ void* wMain::PThreadCall()
 
     if ( aout == NULL )
         return NULL;
-
-    /*
-    if ( _firstthreadrun == true )
-    {
-        _firstthreadrun = false;
-        Sleep( 100 );
-    }
-    */
 
     mp3dec = new MPG123Wrap();
 
@@ -190,8 +229,7 @@ void* wMain::PThreadCall()
 
     loadTags();
     loadArtCover();
-
-    requestWindowRedraw();
+    updateOverlayBG();
 
     while( _threadkillswitch == false )
     {
@@ -322,6 +360,7 @@ void wMain::createComponents()
         if ( boxCoverArt != NULL )
         {
             boxCoverArt->box( FL_NO_BOX );
+            boxCoverArt->callback( fl_w_cb, this );
         }
 
         cli_y += test_h;
@@ -424,7 +463,7 @@ void wMain::createComponents()
                 boxControlBG->set_alpha( 0x7F );
             }
 
-            // Controls ...
+            // Play Controls ...
             // [ 1 ]  [ 2 ]  [ 3 ]
             // 48x48, 64x64, 48x48
 
@@ -516,11 +555,95 @@ void wMain::createComponents()
                 btnNextTrk->callback( fl_w_cb, this );
             }
 
+            ctrlx = 10;
+            ctrly = grpControl->y() + 10;
+
+            //extern unsigned pngimg_ctrl_config_size;
+            //extern unsigned char pngimg_ctrl_config[];
+
+            btnRollUp = new Fl_FocusEffectButton( ctrlx, ctrly, 20, 20, "^" );
+            if ( btnRollUp != NULL )
+            {
+                btnRollUp->box( FL_NO_BOX );
+                btnRollUp->clear_visible_focus();
+
+                extern unsigned pngimg_ctrl_rollup_size;
+                extern unsigned char pngimg_ctrl_rollup[];
+
+                Fl_Image* pimg = new Fl_PNG_Image( "ctrlRollup",
+                                                    pngimg_ctrl_rollup,
+                                                    pngimg_ctrl_rollup_size );
+
+                if ( pimg != NULL )
+                {
+                    btnRollUp->image( (Fl_RGB_Image*)pimg );
+                    btnRollUp->drawparent( mainWindow->clientarea() );
+                    btnRollUp->label( NULL );
+
+                    delete pimg;
+                }
+
+                btnRollUp->callback( fl_w_cb, this );
+            }
+
+            ctrly = grpControl->y() + grpControl->h() - 30;
+
+            btnVolCtrl = new Fl_FocusEffectButton( ctrlx, ctrly, 20, 20, "V" );
+            if ( btnVolCtrl != NULL )
+            {
+                btnVolCtrl->box( FL_NO_BOX );
+                btnVolCtrl->clear_visible_focus();
+
+                extern unsigned pngimg_ctrl_spkr_size;
+                extern unsigned char pngimg_ctrl_spkr[];
+
+                Fl_Image* pimg = new Fl_PNG_Image( "ctrlVolume",
+                                                    pngimg_ctrl_spkr,
+                                                    pngimg_ctrl_spkr_size );
+
+                if ( pimg != NULL )
+                {
+                    btnVolCtrl->image( (Fl_RGB_Image*)pimg );
+                    btnVolCtrl->drawparent( mainWindow->clientarea() );
+                    btnVolCtrl->label( NULL );
+
+                    delete pimg;
+                }
+
+                btnVolCtrl->callback( fl_w_cb, this );
+            }
+
+            ctrlx = grpControl->w() - 30;
+
+            btnListCtrl = new Fl_FocusEffectButton( ctrlx, ctrly, 20, 20, "L");
+            if ( btnListCtrl != NULL )
+            {
+                btnListCtrl->box( FL_NO_BOX );
+                btnListCtrl->clear_visible_focus();
+
+                extern unsigned pngimg_ctrl_list_size;
+                extern unsigned char pngimg_ctrl_list[];
+
+                Fl_Image* pimg = new Fl_PNG_Image( "ctrlList",
+                                                    pngimg_ctrl_list,
+                                                    pngimg_ctrl_list_size );
+
+                if ( pimg != NULL )
+                {
+                    btnListCtrl->image( (Fl_RGB_Image*)pimg );
+                    btnListCtrl->drawparent( mainWindow->clientarea() );
+                    btnListCtrl->label( NULL );
+
+                    delete pimg;
+                }
+
+                btnListCtrl->callback( fl_w_cb, this );
+            }
+
             grpControl->end();
         }
 
         // --------------------------
-
 
         if ( grpViewer != NULL )
         {
@@ -528,23 +651,49 @@ void wMain::createComponents()
             mainWindow->clientarea()->resizable( grpViewer );
         }
 
+        //mainWindow->clientarea_sizes( cli_x, cli_y, cli_w, cli_h );
+        cli_x = mainWindow->clientarea_x();
+        cli_y = mainWindow->clientarea_y();
+        cli_w = mainWindow->clientarea_w();
+        cli_h = cli_y + mainWindow->clientarea_h();
+
         grpOverlay = new Fl_Group( cli_x, cli_y, cli_w, cli_h );
         if ( grpOverlay != NULL )
         {
             grpOverlay->box( FL_FLAT_BOX );
             grpOverlay->begin();
 
-            int pp_w = cli_w / 2;
-            int pp_h = cli_h / 2;
-            int pp_x = ( cli_w - pp_w ) / 2;
-            int pp_y = ( cli_h - pp_h ) / 2;
-
-            Fl_Box* boxtest = new Fl_Box( cli_x + pp_x , cli_y + pp_y, pp_w, pp_h,
-                                          "A\nTEST BOX\nHERE !" );
-            if ( boxtest != NULL )
+            boxOverlayBG = new Fl_Box( cli_x, cli_y, cli_w, cli_h );
+            if ( boxOverlayBG != NULL )
             {
-                boxtest->box( FL_NO_BOX );
-                boxtest->color( FL_WHITE );
+                boxOverlayBG->box( FL_NO_BOX );
+            }
+
+            cli_x += 5;
+            cli_y += 10;
+            cli_w -= 10;
+            cli_h -= 50;
+
+            sclMp3List = new Fl_NobackScroll( cli_x, cli_y, cli_w, cli_h );
+            if ( sclMp3List != NULL )
+            {
+                sclMp3List->color( FL_WHITE );
+                sclMp3List->end();
+
+                for( unsigned cnt=0; cnt<100; cnt++ )
+                {
+                    char tmpstr[40] = {0};
+                    sprintf( tmpstr, "TEST List #%03d", cnt + 1 );
+
+                    Fl_Button* tmpbox = new Fl_Button( 0,0, cli_w - 40, 50, strdup( tmpstr ) );
+                    if ( tmpbox != NULL )
+                    {
+                        tmpbox->align( FL_ALIGN_INSIDE | FL_ALIGN_LEFT );
+                        sclMp3List->add( tmpbox );
+                    }
+                }
+
+                sclMp3List->autoarrange();
             }
 
             grpOverlay->end();
@@ -554,13 +703,15 @@ void wMain::createComponents()
         mainWindow->end();
         mainWindow->callback( fl_w_cb, this );
         mainWindow->callback_onmove( fl_move_cb, this );
+        mainWindow->callback_onsized( fl_sized_cb, this );
+        mainWindow->callback_ondropfiles( fl_ddrop_cb, this );
 
-        int min_w_h = mainWindow->clientarea_y()
-                      + boxCoverArt->h()
-                      + skbProgress->h()
-                      + 2;
+        window_min_h = mainWindow->clientarea_y()
+                        + boxCoverArt->h()
+                       + skbProgress->h()
+                       + 2;
 
-        mainWindow->size_range( DEF_APP_DEFAULT_W, min_w_h, DEF_APP_DEFAULT_W );
+        mainWindow->size_range( DEF_APP_DEFAULT_W, window_min_h, DEF_APP_DEFAULT_W );
 
         // put it center of current desktop.
         int dsk_x = 0;
@@ -718,6 +869,46 @@ void wMain::updateInfo()
     boxFileInfo->label( strtag_fileinfo.c_str() );
 }
 
+void wMain::updateOverlayBG()
+{
+    static bool uobgmutexd = false;
+
+    if ( uobgmutexd == true )
+        return;
+
+    uobgmutexd = true;
+
+    Fl::lock();
+
+    grpViewer->damage( 1 );
+    grpViewer->redraw();
+
+    if ( imgOverlayBg != NULL )
+    {
+        fl_imgtk::discard_user_rgb_image( imgOverlayBg );
+    }
+
+    imgOverlayBg = fl_imgtk::drawblurred_widgetimage( grpViewer,
+                                                      grpViewer->w() / 50 );
+
+    Fl::unlock();
+
+    if ( imgOverlayBg != NULL )
+    {
+        fl_imgtk::brightbess_ex( imgOverlayBg, -50.f );
+    }
+
+    boxOverlayBG->image( imgOverlayBg );
+    boxOverlayBG->redraw();
+
+    if( grpOverlay->visible_r() > 0 )
+    {
+        grpOverlay->redraw();
+    }
+
+    uobgmutexd = false;
+}
+
 void wMain::setNoArtCover()
 {
     if ( imgNoArt == NULL )
@@ -751,6 +942,9 @@ void wMain::setNoArtCover()
     boxTitle->labelcolor( colLabelNoArt );
     boxMiscInfo->labelcolor( colLabelNoArt );
     boxFileInfo->labelcolor( colLabelNoArt );
+    btnRollUp->labelcolor( colLabelNoArt );
+    btnVolCtrl->labelcolor( colLabelNoArt );
+    btnListCtrl->labelcolor( colLabelNoArt );
 
     boxTrackNo->labelcolor( fl_darker( colLabelNoArt ) );
 
@@ -795,52 +989,34 @@ void wMain::switchPlayButton( int state )
     }
 }
 
-void wMain::loadPlayList()
+void wMain::makePlayList( const char* refdir )
 {
     string dirpath;
 
-#ifdef DEBUG
-    dirpath = "./test";
-
-    DirSearch* dsearch = new DirSearch( dirpath.c_str(), ".mp3" );
-    if ( dsearch != NULL )
+    if ( refdir != NULL )
     {
-        vector< string >* plist = dsearch->data();
-        if ( plist->size() > 0 )
+        dirpath = refdir;
+
+        DirSearch* dsearch = new DirSearch( dirpath.c_str(), ".mp3" );
+        if ( dsearch != NULL )
         {
-            for( unsigned cnt=0; cnt<plist->size(); cnt++ )
+            vector< string >* plist = dsearch->data();
+            if ( plist->size() > 0 )
             {
-                mp3list.push_back( plist->at( cnt ) );
-            }
-        }
-
-        delete dsearch;
-    }
-#endif // DEBUG
-
-    if ( _argc > 1 )
-    {
-        for( unsigned cnt=1; cnt<_argc; cnt++ )
-        {
-            if ( DirSearch::DirTest( _argv[1] ) == true )
-            {
-                dirpath = _argv[1];
-            }
-
-            DirSearch* dsearch = new DirSearch( dirpath.c_str(), ".mp3" );
-            if ( dsearch != NULL )
-            {
-                vector< string >* plist = dsearch->data();
-                if ( plist->size() > 0 )
+                for( unsigned cnt=0; cnt<plist->size(); cnt++ )
                 {
-                    for( unsigned cnt=0; cnt<plist->size(); cnt++ )
+                    string item  = plist->at( cnt );
+                    vector< string >::const_iterator it;
+
+                    it = find( mp3list.begin(), mp3list.end(), item.c_str() );
+                    if ( it == mp3list.end() )
                     {
-                        mp3list.push_back( plist->at( cnt ) );
+                        mp3list.push_back( item );
                     }
                 }
-
-                delete dsearch;
             }
+
+            delete dsearch;
         }
     }
 
@@ -876,7 +1052,7 @@ void wMain::playControl( int action )
                 {
                     if ( ( _mp3onplaying == false ) && ( _pt == NULL ) )
                     {
-                        int ret = pthread_create( &_pt, NULL, pthread_work, this );
+                        int ret = pthread_create( &_pt, NULL, pthread_play, this );
                     }
                 }
             }
@@ -892,8 +1068,6 @@ void wMain::playControl( int action )
                         if ( _threadkillswitch == false )
                         {
                             _threadkillswitch = true;
-                            Sleep( 200 );
-                            int retv = 0;
                             pthread_join( _pt, NULL );
                             _pt = NULL;
 
@@ -908,6 +1082,7 @@ void wMain::playControl( int action )
                                 aout->Control( AudioOut::STOP, 0, 0 );
                             }
 
+                            _threadkillswitch = false;
                             _mp3onplaying = false;
                         }
                     }
@@ -917,33 +1092,41 @@ void wMain::playControl( int action )
 
         case 2: /// Previous Track
             {
-                playControl( 1 );
-
-                if ( mp3queue == 0 )
+                if ( mp3list.size() > 0 )
                 {
-                    mp3queue = mp3list.size() - 1;
-                }
-                else
-                {
-                    mp3queue--;
-                }
+                    playControl( 1 );
+                    Sleep( 500 );
 
-                playControl( 0 );
+                    if ( mp3queue == 0 )
+                    {
+                        mp3queue = mp3list.size() - 1;
+                    }
+                    else
+                    {
+                        mp3queue--;
+                    }
+
+                    playControl( 0 );
+                }
             }
             break;
 
         case 3: /// Next Track
             {
-                playControl( 1 );
-
-                mp3queue++;
-
-                if( mp3queue >= mp3list.size() )
+                if ( mp3list.size() > 0 )
                 {
-                    mp3queue = 0;
-                }
+                    playControl( 1 );
+                    Sleep( 500 );
 
-                playControl( 0 );
+                    mp3queue++;
+
+                    if( mp3queue >= mp3list.size() )
+                    {
+                        mp3queue = 0;
+                    }
+
+                    playControl( 0 );
+                }
             }
             break;
     }
@@ -1015,6 +1198,9 @@ void wMain::loadArtCover()
             boxTitle->labelcolor( colLabelArt );
             boxMiscInfo->labelcolor( colLabelArt );
             boxFileInfo->labelcolor( colLabelArt );
+            btnRollUp->labelcolor( colLabelArt );
+            btnVolCtrl->labelcolor( colLabelArt );
+            btnListCtrl->labelcolor( colLabelArt );
 
             boxTrackNo->labelcolor( fl_darker( colLabelArt ) );
 
@@ -1104,7 +1290,7 @@ unsigned wMain::image_color_illum( Fl_RGB_Image* img )
 
 void wMain::requestWindowRedraw()
 {
-    Fl::repeat_timeout( 0.1f, fl_redraw_timer_cb, this );
+    Fl::repeat_timeout( 0.05f, fl_redraw_timer_cb, this );
 }
 
 void wMain::applyThemes()
@@ -1115,15 +1301,12 @@ void wMain::applyThemes()
     {
         rkrawv::ApplyBWindowTheme( mainWindow );
     }
-
 }
 
 void wMain::WidgetCB( Fl_Widget* w )
 {
     if ( w == btnPlayStop )
     {
-        _mp3controlstate = 1;
-
         btnPlayStop->deactivate();
 
         if ( mp3list.size() > 0 )
@@ -1131,9 +1314,11 @@ void wMain::WidgetCB( Fl_Widget* w )
             if ( _mp3onplaying == false )
             {
                 playControl( 0 );
+                _mp3controlnext = 1;
             }
             else
             {
+                _mp3controlnext = -1;
                 playControl( 1 );
                 switchPlayButton( 0 );
             }
@@ -1141,7 +1326,6 @@ void wMain::WidgetCB( Fl_Widget* w )
 
         btnPlayStop->activate();
 
-        _mp3controlstate = 0;
         return;
     }
 
@@ -1171,8 +1355,49 @@ void wMain::WidgetCB( Fl_Widget* w )
         return;
     }
 
+    if ( w == btnRollUp )
+    {
+        static unsigned lastClk = GetTickCount();
+
+        unsigned curClk  = GetTickCount();
+
+        if ( ( curClk - lastClk ) < 1000 )
+        {
+            if ( mainWindow->h() > window_min_h )
+            {
+                mainWindow->resize( mainWindow->x(),
+                                    mainWindow->y(),
+                                    mainWindow->w(),
+                                    window_min_h );
+            }
+
+            lastClk = curClk;
+        }
+
+        return;
+    }
+
+    if ( w == btnListCtrl )
+    {
+        if ( grpOverlay->visible_r() == 0 )
+        {
+            updateOverlayBG();
+            grpOverlay->show();
+
+            return;
+        }
+
+    }
+
     if ( w == mainWindow )
     {
+        if ( grpOverlay->visible_r() > 0 )
+        {
+            grpOverlay->hide();
+
+            return;
+        }
+
         fl_message_title( "Program quit" );
         int retask = fl_ask( "%s", "Program may be terminated if you select YES, Proceed it ?" );
 
@@ -1193,9 +1418,41 @@ void wMain::MoveCB( Fl_Widget* w )
 {
 }
 
+void wMain::SizedCB( Fl_Widget* w )
+{
+    if ( grpOverlay->visible_r() > 0 )
+    {
+        updateOverlayBG();
+    }
+}
+
+void wMain::DDropCB( Fl_Widget* w )
+{
+    const char* testfiles = mainWindow->dragdropfiles();
+
+    if ( testfiles != NULL )
+    {
+        string files = testfiles;
+        vector<string> dlist = split_string( files, "\n");
+
+        for( unsigned cnt=0; cnt<dlist.size(); cnt++)
+        {
+            printf("%s\n", dlist[cnt].c_str());
+            if( DirSearch::DirTest( dlist[cnt].c_str() ) == true )
+            {
+                makePlayList( dlist[cnt].c_str() );
+            }
+        }
+    }
+}
+
 void wMain::DelayedWorkCB()
 {
-    playControl( 0 );
+    if ( btnPlayStop != NULL )
+    {
+        mainWindow->activate();
+        btnPlayStop->do_callback();
+    }
 }
 
 void wMain::OnNewBuffer( unsigned position, unsigned nbsz, unsigned maxposition )
@@ -1218,26 +1475,16 @@ void wMain::OnNewBuffer( unsigned position, unsigned nbsz, unsigned maxposition 
 
 void wMain::OnBufferEnd()
 {
-    if ( mp3dec != NULL )
-    {
-        mp3dec->Close();
-    }
-
-    if ( aout != NULL )
-    {
-        aout->Control( AudioOut::STOP, 0, 0 );
-    }
-
     playControl( 1 );
 
-    _mp3onplaying = false;
-    _threadkillswitch = false;
-
-    if ( _mp3controlstate == 0 )
+    // Check for next doing.
+    if ( _mp3controlnext == 1 )
     {
         // Next track.
         playControl( 2 );
     }
+
+    requestWindowRedraw();
 }
 
 
@@ -1263,6 +1510,24 @@ void fl_move_cb( Fl_Widget* w, void* p )
     }
 }
 
+void fl_sized_cb( Fl_Widget* w, void* p )
+{
+    if ( p != NULL )
+    {
+        wMain* wm = (wMain*)p;
+        wm->SizedCB( w );
+    }
+}
+
+void fl_ddrop_cb( Fl_Widget* w, void* p )
+{
+    if ( p != NULL )
+    {
+        wMain* wm = (wMain*)p;
+        wm->DDropCB( w );
+    }
+}
+
 void fl_redraw_timer_cb( void* p )
 {
     // Simple mutex.
@@ -1274,10 +1539,14 @@ void fl_redraw_timer_cb( void* p )
 
         if ( p != NULL )
         {
-            Fl::flush();
+            Fl::awake();
         }
 
         isflushing = false;
+    }
+    else
+    {
+        Fl::repeat_timeout( 0.05f, fl_redraw_timer_cb, p );
     }
 }
 
@@ -1293,7 +1562,7 @@ void fl_delayed_work_timer_cb( void* p )
 }
 
 
-void* pthread_work( void* p )
+void* pthread_play( void* p )
 {
     if ( p!= NULL )
     {

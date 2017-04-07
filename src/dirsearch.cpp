@@ -7,6 +7,8 @@
 
 #include "dirsearch.h"
 
+#include <locale>
+
 ////////////////////////////////////////////////////////////////////////////////
 
 #ifdef _WIN32
@@ -18,6 +20,16 @@
 ////////////////////////////////////////////////////////////////////////////////
 
 using namespace std;
+
+////////////////////////////////////////////////////////////////////////////////
+
+void struppers( string &src )
+{
+    locale loc;
+
+    for ( string::size_type cnt=0; cnt<src.length(); cnt++)
+        src[cnt] = toupper( src[cnt], loc );
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -46,6 +58,15 @@ void DirSearch::dirsearch( const char* rootdir, const char* endfix )
         while( pDE != NULL )
         {
             string fname = pDE->d_name;
+            string fext;
+
+            struppers( fname );
+
+            if ( endfix != NULL )
+            {
+                fext = endfix;
+                struppers( fext );
+            }
 
             if ( ( fname != "." ) && ( fname != ".." ) )
             {
@@ -55,22 +76,17 @@ void DirSearch::dirsearch( const char* rootdir, const char* endfix )
 
                 if ( DirTest( cfname.c_str() ) == true )
                 {
-                    string cfname = rootdir;
-                    cfname += DIR_SEP;
-                    cfname += pDE->d_name;
-
                     dirsearch( cfname.c_str(), endfix );
                 }
 
-                if ( fname.find( endfix ) != string::npos )
+                struppers( fname );
+
+                if ( fname.find( fext ) != string::npos )
                 {
                     cfname = rootdir;
                     cfname += DIR_SEP;
                     cfname += pDE->d_name;
 
-#ifdef DEBUG
-                    printf( "%s\n", cfname.c_str() );
-#endif // DEBUG
                     _filelist.push_back( cfname );
                 }
             }

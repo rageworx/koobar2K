@@ -13,6 +13,7 @@
 #include "Fl_SeekBar.h"
 #include "Fl_TransBox.h"
 #include "Fl_FocusEffectButton.H"
+#include "Fl_NobackScroll.H"
 
 #include <list>
 #include <vector>
@@ -34,6 +35,8 @@ class wMain : public AudioOutEvent
         void  WidgetCB( Fl_Widget* w );
         void  MenuCB( Fl_Widget* w );
         void  MoveCB( Fl_Widget* w );
+        void  SizedCB( Fl_Widget* w );
+        void  DDropCB( Fl_Widget* w );
         void  DelayedWorkCB();
 
     private:
@@ -51,9 +54,10 @@ class wMain : public AudioOutEvent
         void loadArtCover();
         void updateTrack();
         void updateInfo();
+        void updateOverlayBG();
         void setNoArtCover();
         void switchPlayButton( int state = 0 );
-        void loadPlayList();
+        void makePlayList( const char* refdir = NULL );
         void playControl( int action );
         unsigned image_color_illum( Fl_RGB_Image* img );
         void requestWindowRedraw();
@@ -69,7 +73,7 @@ class wMain : public AudioOutEvent
         bool        _firstthreadrun;
         bool        _mp3art_loaded;
         bool        _mp3onplaying;
-        int         _mp3controlstate;
+        int         _mp3controlnext;
         pthread_t   _pt;
 
     protected:
@@ -88,11 +92,18 @@ class wMain : public AudioOutEvent
         Fl_FocusEffectButton*   btnPrevTrk;
         Fl_FocusEffectButton*   btnPlayStop;
         Fl_FocusEffectButton*   btnNextTrk;
+        Fl_FocusEffectButton*   btnRollUp;
+        Fl_FocusEffectButton*   btnVolCtrl;
+        Fl_FocusEffectButton*   btnListCtrl;
         Fl_Group*               grpOverlay;
         //Fl_GroupAniSwitch*      testswitch;
+        Fl_Box*                 boxOverlayBG;
+        Fl_NobackScroll*        sclMp3List;
+        // ----
+        Fl_RGB_Image*           imgPlayCtrls[4];
         Fl_RGB_Image*           imgWinBG;
         Fl_RGB_Image*           imgNoArt;
-        Fl_RGB_Image*           imgPlayCtrls[4];
+        Fl_RGB_Image*           imgOverlayBg;
         Fl_Color                colLabelNoArt;
         Fl_Color                colLabelArt;
 
@@ -103,6 +114,7 @@ class wMain : public AudioOutEvent
         unsigned                mp3_frequency;
         unsigned                mp3dpos_cur;
         unsigned                mp3dpos_max;
+        unsigned                window_min_h;
         std::string             strinf_trackno;
         std::string             strtag_artist;
         std::string             strtag_title;

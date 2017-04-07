@@ -133,12 +133,12 @@ AudioOut::AResult AudioDXSound::InitAudio( unsigned chl, unsigned freq )
 
         return OK;
     }
-#ifdef DEBUG
+#ifdef DEBUG_AUDIO
     else
     {
         printf("Failure: DirectSoundCreate()\n");
     }
-#endif // DEBUG
+#endif // DEBUG_AUDIO
     return FAIL;
 }
 
@@ -317,12 +317,12 @@ void* AudioDXSound::ThreadCall()
                         {
                             pdxb->pdxbuffer->Play( 0, 0, 0 );
                             pdxb->status = PLAYING;
-#ifdef DEBUG
+#ifdef DEBUG_AUDIO_BUFFER_INDEX
                             printf( "Continued play _dxbidx_r = %d ( pos = %d / %d )\n",
                                     _dxbidx_r,
                                     pdxb->position,
                                     _buffer.size() );
-#endif // DEBUG
+#endif // DEBUG_AUDIO_BUFFER_INDEX
 
                             _prevbufferque = pdxb->position;
                         }
@@ -382,27 +382,56 @@ bool AudioDXSound::createNextBuffer( bool flushleft )
 
     if ( _dxbuff[ _dxbidx_w ] == NULL )
     {
-#ifdef DEBUG
+#ifdef DEBUG_AUDIO_BUFFER_INDEX
         printf( "new buff index of _dxbidx_w = %d\n", _dxbidx_w );
-#endif // DEBUG
+#endif // DEBUG_AUDIO_BUFFER_INDEX
 
         unsigned realbuffsz = buffsz - DEF_ADXS_MIN_NEXT_SZ;
         unsigned cbbuffpos  = realbuffsz - DEF_ADXS_MIN_NEXT_SZ;
 
         if ( ( _currentbufferque + realbuffsz ) > curbuffsz )
         {
-            buffsz = curbuffsz - _currentbufferque;
-            cbbuffpos = buffsz;
+            buffsz     = curbuffsz - _currentbufferque;
+            realbuffsz = buffsz;
+            cbbuffpos  = buffsz;
             islastbuff = true;
         }
 
+        // I don't know how remove popping noise while changing buffer,
+        // So I made a silent buffer after real audio data.
+        // Expect it will good for removing popping noise.
+        char* copybuff = new char[ buffsz ];
+
+        if ( copybuff == NULL )
+            return false;
+
+        memset( copybuff, 0, buffsz );
+        memcpy( copybuff, &refbuff[ _currentbufferque ], realbuffsz );
+
+#ifdef USE_SIDE_BUFFER
+        // Make more buffer to appended.
+        if ( cbbuffpos < realbuffsz )
+        {
+            if ( curbuffsz < ( _currentbufferque + realbuffsz ) )
+            {
+                unsigned moresz = DEF_ADXS_MIN_NEXT_SZ / 2;
+                memcpy( &copybuff[ realbuffsz ],
+                        &refbuff[ _currentbufferque + realbuffsz ],
+                        moresz );
+            }
+        }
+#endif // USE_SIDE_BUFFER
+
         DSBUFFERDESC tmpDESC;
         IDirectSoundBuffer* newdxsb = NULL;
-        newdxsb = createDSBufferRaw( &refbuff[ _currentbufferque ],
+        newdxsb = createDSBufferRaw( copybuff,
                                      _channels,
                                      _frequency,
                                      buffsz,
                                      tmpDESC );
+
+        delete[] copybuff;
+
         if ( newdxsb != NULL )
         {
             HRESULT hr = DS_OK;
@@ -469,8 +498,9 @@ bool AudioDXSound::createNextBuffer( bool flushleft )
     }
     else
     {
+#ifdef DEBUG_AUDIO_BUFFER_INDEX
         printf( "resued buff index of _dxbidx_w = %d\n", _dxbidx_w );
-
+#endif // DEBUG_AUDIO_BUFFER_INDEX
         DXBufferState* dxbs = (DXBufferState* )_dxbuff[ _dxbidx_w ];
 
         if ( dxbs == NULL )
@@ -498,9 +528,9 @@ bool AudioDXSound::createNextBuffer( bool flushleft )
                                 _channels, _frequency, buffsz, tmpDESC );
         if ( retb == false )
         {
-#ifdef DEBUG
+#ifdef DEBUG_AUDIO_BUFFER_INDEX
             printf( "Error: Fill buffer failed.\n" );
-#endif // DEBUG
+#endif // DEBUG_AUDIO_BUFFER_INDEX
             return false;
         }
 
@@ -595,9 +625,9 @@ void AudioDXSound::procStop()
 
     _played = false;
 
-#ifdef DEBUG
+#ifdef DEBUG_AUDIO
     printf("void AudioDXSound::procStop() done.\n" );
-#endif // DEBUG
+#endif // DEBUG_AUDIO
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -651,9 +681,9 @@ IDirectSoundBuffer* createDSBufferRaw( const char* ref, int chnls, int rate, int
         return newDSBuffer;
     }
 
-#ifdef DEBUG
+#ifdef DEBUG_AUDIO
     printf("Error: Failed to create createDSBufferRaw();\n");
-#endif // DEBUG
+#endif // DEBUG_AUDIO
     return NULL;
 }
 

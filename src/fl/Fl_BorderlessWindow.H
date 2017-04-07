@@ -56,6 +56,22 @@ class Fl_BorderlessWindowTitle : public Fl_Box
         unsigned    dblclk_nxt_t;
 };
 
+class Fl_BorderlessDropServer : public Fl_Box
+{
+    public:
+        Fl_BorderlessDropServer( int X, int Y, int W, int H, Fl_BorderlessWindow* parent = NULL )
+         : Fl_Box( X, Y, W, H ), _parent(parent) { Fl_Box::box( FL_NO_BOX ); \
+                                                   when( FL_WHEN_CHANGED );}
+
+        ~Fl_BorderlessDropServer(){}
+
+    protected:
+        int handle( int e );
+
+    protected:
+        Fl_BorderlessWindow* _parent;
+};
+
 class Fl_BorderlessWindow : public Fl_Double_Window
 {
     public:
@@ -90,6 +106,8 @@ class Fl_BorderlessWindow : public Fl_Double_Window
         void labelcolor( Fl_Color c );
         void labelsize( Fl_Fontsize pix );
         void enlarge();
+        void locksizing();
+        void unlocksizing();
         void WCB( Fl_Widget* w );
 
     public:
@@ -109,9 +127,18 @@ class Fl_BorderlessWindow : public Fl_Double_Window
 
     public:
         void procdblclktitle();
-        void procwindowmove( int x, int y )  { if ( maximized_wh == false ) position( x, y ); }
-        void callback_onmove( Fl_Callback* cb, void* p ) { cbOnMove = cb; pdOnMove = p; }
-        int  shown() { return realshown; }
+        void procwindowmove( int x, int y )
+        { if ( maximized_wh == false ) position( x, y ); }
+        void callback_onmove( Fl_Callback* cb, void* p )
+        { cbOnMove = cb; pdOnMove = p; }
+        void callback_onsized( Fl_Callback* cb, void* p )
+        { cbOnSized = cb; pdOnSized = p; }
+        void callback_ondropfiles( Fl_Callback* cb, void* p )
+        { cbOnDrop = cb; pdOnDrop = p; }
+        const char* dragdropfiles() { return ddropfiles; }
+        int  dohandle( int e ) { return handle(e); }
+        int  shown()
+        { return realshown; }
 
     protected:
         int  sizegriptest( int x, int y );
@@ -119,6 +146,7 @@ class Fl_BorderlessWindow : public Fl_Double_Window
         void draw();
         void releaseconvtitleiconimg();
         void regenbgcache( int w, int h );
+        void reorders();
 
     protected:
         bool    sizegripped;
@@ -139,6 +167,9 @@ class Fl_BorderlessWindow : public Fl_Double_Window
         int     max_w;
         int     max_h;
         int     realshown;
+        bool    sizelocked;
+        bool    dragdropenabled;
+        bool    dragdroping;
 
     private:
         Fl_Boxtype                  defaultboxtype;
@@ -153,6 +184,13 @@ class Fl_BorderlessWindow : public Fl_Double_Window
         Fl_Align                    backgroundfitting;
         Fl_Callback*                cbOnMove;
         void*                       pdOnMove;
+        Fl_Callback*                cbOnSized;
+        void*                       pdOnSized;
+        Fl_Callback*                cbOnDrop;
+        void*                       pdOnDrop;
+        char*                       ddropfiles;
+        Fl_BorderlessDropServer*    ddropServer;
 };
+
 
 #endif /// of __FL_BORDERLESSWINDOW_H__
