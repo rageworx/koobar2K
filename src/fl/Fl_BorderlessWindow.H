@@ -19,6 +19,14 @@
 #include <FL/Fl_Image.H>
 #include <FL/Fl_RGB_Image.H>
 
+#ifdef USE_FL_BORDERLESSWINDOW_DRAGDROP_1
+#include "Fl_TransBox.h"
+
+#define DDROP_SERVER_TYPE   Fl_TransBox
+#else
+#define DDROP_SERVER_TYPE   Fl_Box
+#endif // USE_FL_BORDERLESSWINDOW_DRAGDROP_1
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class Fl_BorderlessWindow;
@@ -56,12 +64,31 @@ class Fl_BorderlessWindowTitle : public Fl_Box
         unsigned    dblclk_nxt_t;
 };
 
-class Fl_BorderlessDropServer : public Fl_Box
+class Fl_BorderlessDropServer : public DDROP_SERVER_TYPE
 {
     public:
-        Fl_BorderlessDropServer( int X, int Y, int W, int H, Fl_BorderlessWindow* parent = NULL )
-         : Fl_Box( X, Y, W, H ), _parent(parent) { Fl_Box::box( FL_NO_BOX ); \
-                                                   when( FL_WHEN_CHANGED );}
+        Fl_BorderlessDropServer( int X, int Y, int W, int H,
+                                 Fl_BorderlessWindow* parent = NULL )
+        : DDROP_SERVER_TYPE( X, Y, W, H ), _parent(parent)
+        {
+#if USE_FL_BORDERLESSWINDOW_DRAGDROP_1
+            align( FL_ALIGN_INSIDE | FL_ALIGN_CENTER );
+            labelcolor( 0xFFFFFF00 );
+            label("Drag\nfolder\nhere");
+            labelfont( FL_FREE_FONT );
+            labelsize( 40 );
+            color( 0 ); set_alpha( 0x7f );
+            when( FL_WHEN_CHANGED );
+#else
+            align( FL_ALIGN_INSIDE | FL_ALIGN_CENTER );
+            labelcolor( 0xFFFFFF00 );
+            label("Drag\nfolder\nhere");
+            labelfont( FL_FREE_FONT );
+            labelsize( 40 );
+            color( 0 );
+            when( FL_WHEN_CHANGED );
+#endif // USE_FL_BORDERLESSWINDOW_DRAGDROP_1
+        }
 
         ~Fl_BorderlessDropServer(){}
 

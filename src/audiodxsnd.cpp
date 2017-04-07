@@ -408,7 +408,7 @@ bool AudioDXSound::createNextBuffer( bool flushleft )
         memset( copybuff, 0, buffsz );
         memcpy( copybuff, &refbuff[ _currentbufferque ], realbuffsz );
 
-#ifdef USE_SIDE_BUFFER
+#ifndef USE_EXACT_BUFFER_SIZE
         // Make more buffer to appended.
         if ( cbbuffpos < realbuffsz )
         {

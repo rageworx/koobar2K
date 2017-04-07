@@ -50,6 +50,7 @@
 			<Add option="-ffast-math" />
 			<Add option="-DUSING_INTERPOLATED_ROTATE_FREE" />
 			<Add option="-DUSING_OMP" />
+			<Add option="-DUSE_FL_BORDERLESSWINDOW_DRAGDROP_1" />
 			<Add directory="src" />
 			<Add directory="inc" />
 			<Add directory="res" />

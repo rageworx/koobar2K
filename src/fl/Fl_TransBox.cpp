@@ -10,12 +10,13 @@ Fl_TransBox::Fl_TransBox(int x, int y, int w, int h, char* l)
     box(FL_NO_BOX);
     buffer = new unsigned char[4*w*h];
     img = new Fl_RGB_Image(buffer, w, h, 4);
-    image(img);
     color((Fl_Color)0);
 }
 
 Fl_TransBox::~Fl_TransBox()
 {
+    deimage();
+
     if ( buffer != NULL )
     {
         delete[] buffer;
@@ -84,13 +85,22 @@ void Fl_TransBox::fill_buffer()
 
 void Fl_TransBox::draw()
 {
-    Fl_Box::draw();
+    if ( img != NULL )
+    {
+        img->draw( x(), y() );
+    }
 
+    if ( label() != NULL )
+    {
+        Fl_Box::draw_label();
+    }
+    else
     if ( dispimg != NULL )
     {
         int putX = ( w() - dispimg->w() ) / 2;
         int putY = ( h() - dispimg->h() ) / 2;
 
         dispimg->draw(x() + putX, y() + putY);
+
     }
 }

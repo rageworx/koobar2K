@@ -37,6 +37,7 @@ class wMain : public AudioOutEvent
         void  MoveCB( Fl_Widget* w );
         void  SizedCB( Fl_Widget* w );
         void  DDropCB( Fl_Widget* w );
+        void  ListCB( Fl_Widget* w );
         void  DelayedWorkCB();
 
     private:

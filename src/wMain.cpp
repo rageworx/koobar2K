@@ -38,6 +38,7 @@ using namespace fl_imgtk;
 ////////////////////////////////////////////////////////////////////////////////
 
 void fl_w_cb( Fl_Widget* w, void* p );
+void fl_list_cb( Fl_Widget* w, void* p );
 void fl_move_cb( Fl_Widget* w, void* p );
 void fl_sized_cb( Fl_Widget* w, void* p );
 void fl_ddrop_cb( Fl_Widget* w, void* p );
@@ -677,23 +678,7 @@ void wMain::createComponents()
             sclMp3List = new Fl_NobackScroll( cli_x, cli_y, cli_w, cli_h );
             if ( sclMp3List != NULL )
             {
-                sclMp3List->color( FL_WHITE );
                 sclMp3List->end();
-
-                for( unsigned cnt=0; cnt<100; cnt++ )
-                {
-                    char tmpstr[40] = {0};
-                    sprintf( tmpstr, "TEST List #%03d", cnt + 1 );
-
-                    Fl_Button* tmpbox = new Fl_Button( 0,0, cli_w - 40, 50, strdup( tmpstr ) );
-                    if ( tmpbox != NULL )
-                    {
-                        tmpbox->align( FL_ALIGN_INSIDE | FL_ALIGN_LEFT );
-                        sclMp3List->add( tmpbox );
-                    }
-                }
-
-                sclMp3List->autoarrange();
             }
 
             grpOverlay->end();
@@ -1381,6 +1366,27 @@ void wMain::WidgetCB( Fl_Widget* w )
     {
         if ( grpOverlay->visible_r() == 0 )
         {
+            sclMp3List->clear();
+
+            int lw = sclMp3List->w() - 40;
+
+            for( unsigned cnt=0; cnt<mp3list.size(); cnt++  )
+            {
+                Fl_Button* newbtn = new Fl_Button( 0,0,lw,20, mp3list[cnt].c_str() );
+                if ( newbtn != NULL )
+                {
+                    newbtn->align( FL_ALIGN_INSIDE | FL_ALIGN_CLIP | FL_ALIGN_RIGHT );
+                    newbtn->color( 0x33333300 );
+                    newbtn->labelcolor( 0xFFFFFF00 );
+                    newbtn->labelfont( FL_FREE_FONT );
+                    newbtn->labelsize( 11 );
+                    sclMp3List->add( newbtn );
+                    newbtn->callback( fl_list_cb, this );
+                }
+            }
+
+            sclMp3List->autoarrange();
+
             updateOverlayBG();
             grpOverlay->show();
 
@@ -1446,6 +1452,42 @@ void wMain::DDropCB( Fl_Widget* w )
     }
 }
 
+void wMain::ListCB( Fl_Widget* w )
+{
+    unsigned cmax = sclMp3List->children();
+
+    if ( cmax > 2 )
+        cmax -= 2;
+
+    for( unsigned cnt=0; cnt<cmax; cnt++ )
+    {
+        if ( sclMp3List->child( cnt ) == w )
+        {
+            playControl( 1 );
+
+            //find LUT
+            int lutpos = -1;
+
+            for( unsigned c2=0; c2<mp3listLUT.size(); c2++ )
+            {
+                if ( mp3listLUT[ c2 ] == cnt )
+                {
+                    lutpos = c2;
+                    break;
+                }
+            }
+
+            grpOverlay->hide();
+
+            if ( lutpos >= 0 )
+            {
+                mp3queue = lutpos;
+                playControl( 0 );
+            }
+        }
+    }
+}
+
 void wMain::DelayedWorkCB()
 {
     if ( btnPlayStop != NULL )
@@ -1498,6 +1540,15 @@ void fl_w_cb( Fl_Widget* w, void* p )
     {
         wMain* wm = (wMain*)p;
         wm->WidgetCB( w );
+    }
+}
+
+void fl_list_cb( Fl_Widget* w, void* p )
+{
+    if ( p != NULL )
+    {
+        wMain* wm = (wMain*)p;
+        wm->ListCB( w );
     }
 }
 
