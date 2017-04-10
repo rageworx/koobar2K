@@ -839,8 +839,8 @@ void wMain::updateInfo()
 
     strtag_fileinfo.clear();
 
-    char* strstro[] = { "stereo", "joint-stereo", "dual", "mono" };
-    char* strbrs[] = { "CBR", "VBR", "ABR" };
+    const char* strstro[] = { "stereo", "joint-stereo", "dual", "mono" };
+    const char* strbrs[] = { "CBR", "VBR", "ABR" };
 
     sprintf( tmpmap, "%s - %.1fKHz - %s - %dKbps - mpeg.l%d",
              strstro[ mp3dec->Mode() ],
