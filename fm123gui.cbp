@@ -107,6 +107,8 @@
 		<Unit filename="src/minGlue.h" />
 		<Unit filename="src/minIni.cpp" />
 		<Unit filename="src/minIni.h" />
+		<Unit filename="src/mp3list.cpp" />
+		<Unit filename="src/mp3list.h" />
 		<Unit filename="src/mpg123wrap.cpp" />
 		<Unit filename="src/mpg123wrap.h" />
 		<Unit filename="src/noartpng.cpp" />

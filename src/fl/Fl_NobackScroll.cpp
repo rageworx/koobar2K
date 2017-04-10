@@ -9,7 +9,8 @@ Fl_NobackScroll::Fl_NobackScroll(int X,int Y,int W,int H,const char* L)
    scrollbar(X+W-Fl::scrollbar_size(),Y, Fl::scrollbar_size(),H-Fl::scrollbar_size()),
    hscrollbar(X,Y+H-Fl::scrollbar_size(), W-Fl::scrollbar_size(),Fl::scrollbar_size()),
    xsep( 10 ),
-   ysep( 10 )
+   ysep( 10 ),
+   imgbg( NULL )
 {
     type( BOTH );
 
@@ -59,6 +60,7 @@ void Fl_NobackScroll::fix_scrollbar_order()
 void Fl_NobackScroll::draw_clip(void* v,int X, int Y, int W, int H)
 {
     fl_push_clip(X,Y,W,H);
+
     Fl_NobackScroll* s = (Fl_NobackScroll*)v;
 
     Fl_Widget*const* a = s->array();
@@ -277,10 +279,16 @@ void Fl_NobackScroll::draw()
     int X,Y,W,H;
     bbox(X,Y,W,H);
 
-    //fl_color( color() );
-    //fl_rectf( X, Y, W, H );
-
     uchar d = FL_DAMAGE_ALL;
+
+    fl_push_clip(X,Y,W,H);
+
+    if ( imgbg != NULL )
+    {
+        imgbg->draw( 0, 0 );
+    }
+
+    fl_pop_clip();
 
     draw_clip(this, X, Y, W, H);
 

@@ -118,7 +118,11 @@ AudioOut::AResult AudioDXSound::InitAudio( unsigned chl, unsigned freq )
 
     if ( hr == S_OK )
     {
-        pDSnd->SetCooperativeLevel( _hParent, DSSCL_NORMAL );
+        if ( pDSnd->SetCooperativeLevel( _hParent, DSSCL_NORMAL ) != S_OK )
+        {
+            MessageBox( _hParent, "ERROR while SetCooperativeLevel()", "Error", MB_ICONERROR );
+            return FAIL;
+        }
 
         _channels  = chl;
         _frequency = freq;
@@ -414,7 +418,7 @@ bool AudioDXSound::createNextBuffer( bool flushleft )
         {
             if ( curbuffsz < ( _currentbufferque + realbuffsz ) )
             {
-                unsigned moresz = DEF_ADXS_MIN_NEXT_SZ / 2;
+                unsigned moresz = DEF_ADXS_MIN_NEXT_SZ / 8;
                 memcpy( &copybuff[ realbuffsz ],
                         &refbuff[ _currentbufferque + realbuffsz ],
                         moresz );

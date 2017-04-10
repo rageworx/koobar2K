@@ -495,11 +495,6 @@ Fl_BorderlessWindow::Fl_BorderlessWindow( int W, int H, const char* T )
 
 Fl_BorderlessWindow::~Fl_BorderlessWindow()
 {
-    if ( ddropServer != NULL )
-    {
-        delete ddropServer;
-    }
-
     releaseconvtitleiconimg();
 
     for( unsigned cnt=0; cnt<4; cnt++ )
@@ -515,9 +510,15 @@ Fl_BorderlessWindow::~Fl_BorderlessWindow()
         fl_imgtk::discard_user_rgb_image( backgroundimgcached );
     }
 
+    if ( ddropServer != NULL )
+    {
+        delete ddropServer;
+    }
+
     if ( ddropfiles != NULL )
     {
-        free( ddropfiles );
+        delete[] ddropfiles;
+        ddropfiles = NULL;
     }
 }
 
@@ -779,12 +780,23 @@ int Fl_BorderlessWindow::handle( int e )
 
                 if ( ddropfiles != NULL )
                 {
-                    free( ddropfiles );
+                    delete[] ddropfiles;
+                    ddropfiles = NULL;
                 }
 
                 if ( Fl::event_text() != NULL )
                 {
-                    ddropfiles = strdup( Fl::event_text() );
+                    const char* listsrc = Fl::event_text();
+                    int convsz = strlen( listsrc );
+                    if ( convsz >  0 )
+                    {
+                        ddropfiles = new char[ convsz ];
+                        if ( ddropfiles != NULL )
+                        {
+                            const char* convstr = fl_utf2mbcs( listsrc );
+                            strcpy( ddropfiles, convstr );
+                        }
+                    }
                 }
 
                 ddropServer->hide();

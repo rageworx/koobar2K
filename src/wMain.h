@@ -22,6 +22,7 @@
 #include <pthread.h>
 
 #include "mpg123wrap.h"
+#include "mp3list.h"
 #include "audioout.h"
 
 class wMain : public AudioOutEvent
@@ -124,9 +125,9 @@ class wMain : public AudioOutEvent
         std::string             strtag_fileinfo;
 
     protected:
-        std::vector< std::string >  mp3list;
-        std::vector< unsigned >     mp3listLUT;
-        unsigned                    mp3queue;
+        Mp3List*  mp3list;
+        unsigned  mp3queue;
+        std::vector< std::string > liststrs;
 };
 
 #endif /// of __WINMAIN_H__

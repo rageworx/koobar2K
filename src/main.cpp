@@ -22,10 +22,6 @@ void procAutoLocale()
 {
     LANGID currentUIL = GetSystemDefaultLangID();
 
-#ifdef DEBUG
-    printf("current LANG ID = %08X ( %d )\n", currentUIL, currentUIL );
-#endif // DEBUG
-
     const char* convLoc = NULL;
 
     switch( currentUIL & 0xFF )
@@ -55,6 +51,11 @@ void procAutoLocale()
             reffntshape = "Tahoma";
             break;
     }
+
+#ifdef DEBUG
+    printf( "current LANG ID = %08X ( %d ), locale = %s\n",
+            currentUIL, currentUIL, convLoc );
+#endif // DEBUG
 
     setlocale( LC_ALL, convLoc );
 }

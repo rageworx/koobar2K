@@ -83,6 +83,7 @@ wMain::wMain( int argc, char** argv )
    imgWinBG( NULL ),
    imgNoArt( NULL ),
    imgOverlayBg( NULL ),
+   mp3list( NULL ),
    aout( NULL )
 {
     parseParams();
@@ -140,12 +141,20 @@ wMain::wMain( int argc, char** argv )
         aout->InitAudio( mp3_channels, mp3_frequency );
     }
 
+    mp3list = new Mp3List();
+
     // Registering timer.
     Fl::add_timeout( 0.1f, fl_redraw_timer_cb, this );
 }
 
 wMain::~wMain()
 {
+    mpg123wrap_exit();
+
+    liststrs.clear();
+
+    if ( mp3list != NULL )
+        delete mp3list;
 
     // Removing timer.
     Fl::remove_timeout( fl_redraw_timer_cb );
@@ -187,7 +196,7 @@ int wMain::Run()
         }
     }
 
-    if ( mp3list.size() > 0 )
+    if ( mp3list->Size() > 0 )
     {
         mainWindow->deactivate();
         Fl::add_timeout( 0.5f, fl_delayed_work_timer_cb, this );
@@ -208,14 +217,14 @@ void* wMain::PThreadCall()
     if ( mp3dec == NULL )
         return NULL;
 
-    if ( mp3list.size() == 0 )
+    if ( mp3list->Size() == 0 )
         return NULL;
 
     mp3dpos_cur = 0;
     mp3dpos_max = 0;
 
-    unsigned idx = mp3listLUT[ mp3queue ];
-    const char* mp3fn = mp3list[ idx ].c_str();
+    unsigned idx = mp3list->PlayQueue( mp3queue );
+    const char* mp3fn = mp3list->FileName( idx );
 
     if ( mp3dec->Open( mp3fn ) == false )
     {
@@ -226,11 +235,21 @@ void* wMain::PThreadCall()
     switchPlayButton( 0 );
 
     // Display progress to first ...
-    OnNewBuffer( 1, 10, 10000 );
+    OnNewBuffer( 1, 10, 1000000 );
+
+    Fl::lock();
 
     loadTags();
     loadArtCover();
     updateOverlayBG();
+
+    Fl::unlock();
+
+    requestWindowRedraw();
+
+    //MessageBox( fl_xid( mainWindow ), "11111", "DEBUG", MB_ICONINFORMATION );
+
+    unsigned failure_count = 0;
 
     while( _threadkillswitch == false )
     {
@@ -239,31 +258,48 @@ void* wMain::PThreadCall()
         if ( mp3dec != NULL )
         {
             bool isnext = false;
-            mp3dec->DecodeFramePos( mp3dpos_cur, mp3dpos_max );
+
+            if ( mp3dpos_max > 0 )
+            {
+                mp3dec->DecodeFramePos( mp3dpos_cur, mp3dpos_max );
+            }
+
             unsigned abuffsz = mp3dec->DecodeFrame( abuff, &isnext );
 
-            if ( ( mp3_frequency != mp3dec->Frequency() ) ||
-                 ( mp3_channels  != mp3dec->Channels() ) )
+            Mp3Item *pItem = mp3list->Get( mp3queue );
+
+            if ( ( mp3_frequency != pItem->frequency() ) ||
+                 ( mp3_channels  != pItem->channels() ) )
             {
-                mp3_frequency = mp3dec->Frequency();
-                mp3_channels  = mp3dec->Channels();
+                mp3_frequency = pItem->frequency();
+                mp3_channels  = pItem->channels();
 
                 aout->InitAudio( mp3_channels, mp3_frequency );
             }
 
             if ( abuffsz > 0 )
             {
-                aout->WriteBuffer( abuff, abuffsz );
-
-                if ( _mp3onplaying == false )
+                if ( aout->WriteBuffer( abuff, abuffsz ) == AudioOut::OK )
                 {
-                    aout->Control( AudioOut::PLAY, 0, 0 );
-                    //bPlayed = true;
-                    if ( aout->ControlState() == AudioOut::PLAY )
+
+                    if ( _mp3onplaying == false )
                     {
-                        switchPlayButton( 1 );
-                        _mp3onplaying = true;
+                        aout->Control( AudioOut::PLAY, 0, 0 );
+                        //bPlayed = true;
+                        if ( aout->ControlState() == AudioOut::PLAY )
+                        {
+                            switchPlayButton( 1 );
+                            _mp3onplaying = true;
+                        }
                     }
+                }
+                else
+                {
+                    mp3dec->Close();
+                    delete mp3dec;
+                    mp3dec = NULL;
+
+                    return NULL;
                 }
             }
             else
@@ -272,6 +308,11 @@ void* wMain::PThreadCall()
                 mp3dec->Close();
                 delete mp3dec;
                 mp3dec = NULL;
+
+                if ( _mp3onplaying == false )
+                {
+                    playControl( 1 );
+                }
             }
         }
         else
@@ -704,12 +745,21 @@ void wMain::createComponents()
         int dsk_w = 0;
         int dsk_h = 0;
 
+        /*
         Fl::screen_work_area( dsk_x, dsk_y, dsk_w, dsk_h );
 
         int win_p_x = ( ( dsk_w - dsk_x ) - DEF_APP_DEFAULT_W ) / 2;
         int win_p_y = ( ( dsk_h - dsk_y ) - DEF_APP_DEFAULT_H ) / 2;
 
         mainWindow->position( win_p_x, win_p_y );
+        */
+
+        int mse_x;
+        int mse_y;
+
+        Fl::get_mouse( mse_x, mse_y );
+
+        mainWindow->position( mse_x, mse_y );
 
         mainWindow->show();
     }
@@ -731,86 +781,89 @@ void wMain::loadTags()
     strtag_album.clear();
     strtag_moreinfo.clear();
 
-    if ( mp3dec->GetTag( "track" , tmpstr, &tmpstrsz) == true )
-    {
-        if ( tmpstr != NULL )
-        {
-            strtag_title = (const char*)tmpstr;
-            strtag_title += ".";
+    int realidx = mp3list->PlayQueue( mp3queue );
 
-            free( tmpstr );
+    Mp3Item* pItem = mp3list->Get( realidx );
+
+    char tmpmap[80] = {0};
+
+    if ( pItem != NULL )
+    {
+        if ( pItem->track() != NULL )
+        {
+            strtag_title = pItem->track();
+            strtag_title += ". ";
         }
-    }
 
-    if ( mp3dec->GetTag( "title" , tmpstr, &tmpstrsz) == true )
-    {
-        if ( tmpstr != NULL )
+        if ( pItem->title() != NULL )
         {
-            strtag_title += (const char*)tmpstr;
+            strtag_title += pItem->title();
+        }
 
-            free( tmpstr );
+        if ( pItem->album() != NULL )
+        {
+            strtag_album = pItem->album();
+        }
+
+        if ( pItem->artist() != NULL )
+        {
+            strtag_artist = pItem->artist();
+        }
+
+        if ( pItem->year() != NULL )
+        {
+            strtag_artist += " (";
+            strtag_artist += pItem->year();
+            strtag_artist += ")";
+        }
+
+        if ( pItem->genre() != NULL )
+        {
+            strtag_moreinfo = pItem->genre();
+        }
+
+        // file info ---
+        if ( pItem->mode() != NULL )
+        {
+            strtag_fileinfo = pItem->mode();
+        }
+
+        if ( pItem->frequency() > 0 )
+        {
+            sprintf( tmpmap,
+                     " - %.1fKHz",
+                     (float)pItem->frequency() / (float)1000 );
+
+            strtag_fileinfo += tmpmap;
+        }
+
+        if ( pItem->bitrate() != NULL )
+        {
+            sprintf( tmpmap,
+                     " - %dKbps",
+                     pItem->bitrate() );
+
+            strtag_fileinfo += tmpmap;
+        }
+
+        if ( pItem->layer() != NULL )
+        {
+            sprintf( tmpmap,
+                     " - mpeg.l%d",
+                     pItem->layer() );
+
+            strtag_fileinfo += tmpmap;
         }
 
         boxTitle->label( strtag_title.c_str() );
+        boxAlbum->label( strtag_album.c_str() );
+        boxArtist->label( strtag_artist.c_str() );
+        boxMiscInfo->label( strtag_moreinfo.c_str() );
+        boxFileInfo->label( strtag_fileinfo.c_str() );
+
+        updateInfo();
     }
 
-    if ( mp3dec->GetTag( "album" , tmpstr, &tmpstrsz) == true )
-    {
-        if ( tmpstr != NULL )
-        {
-            strtag_album = (const char*)tmpstr;
-
-            free( tmpstr );
-        }
-    }
-
-    if ( mp3dec->GetTag( "year", tmpstr, &tmpstrsz ) == true )
-    {
-        if ( tmpstr != NULL )
-        {
-            if ( strtag_album.size() > 0 )
-            {
-                strtag_album += " (";
-                strtag_album += (const char*)tmpstr;
-                strtag_album += ")";
-            }
-            else
-            {
-                strtag_album += (const char*)tmpstr;
-            }
-
-            free( tmpstr );
-        }
-    }
-
-
-    if ( mp3dec->GetTag( "artist" , tmpstr, &tmpstrsz) == true )
-    {
-        if ( tmpstr != NULL )
-        {
-            strtag_artist = (const char*)tmpstr;
-
-            free( tmpstr );
-        }
-    }
-
-    strtag_moreinfo.clear();
-
-    if ( mp3dec->GetTag( "genre", tmpstr, &tmpstrsz ) == true )
-    {
-        if ( tmpstr != NULL )
-        {
-            strtag_moreinfo += (const char*)tmpstr;
-
-            free( tmpstr );
-        }
-    }
-
-    boxAlbum->label( strtag_album.c_str() );
-    boxArtist->label( strtag_artist.c_str() );
-    boxMiscInfo->label( strtag_moreinfo.c_str() );
-
-    updateInfo();
 }
 
 void wMain::updateTrack()
@@ -819,9 +872,9 @@ void wMain::updateTrack()
 
     strinf_trackno.clear();
 
-    if ( mp3list.size() > 0 )
+    if ( mp3list->Size() > 0 )
     {
-        sprintf( tmpmap, "%03d/%03d", mp3queue + 1, mp3list.size() );
+        sprintf( tmpmap, "%03d/%03d", mp3queue + 1, mp3list->Size() );
         strinf_trackno = tmpmap;
     }
     else
@@ -839,15 +892,17 @@ void wMain::updateInfo()
 
     strtag_fileinfo.clear();
 
-    const char* strstro[] = { "stereo", "joint-stereo", "dual", "mono" };
-    const char* strbrs[] = { "CBR", "VBR", "ABR" };
+    Mp3Item* pItem = mp3list->Get( mp3queue );
 
-    sprintf( tmpmap, "%s - %.1fKHz - %s - %dKbps - mpeg.l%d",
-             strstro[ mp3dec->Mode() ],
-             (float)mp3dec->Frequency() / (float)1000,
-             strbrs[ mp3dec->BRtype() ],
-             mp3dec->BitRate(),
-             mp3dec->Layer() );
+    if ( pItem == NULL )
+        return;
+
+    sprintf( tmpmap, "%d - %.1fKHz - %s - %dKbps - mpeg.l%d",
+             pItem->channels(),
+             (float)pItem->frequency() / (float)1000,
+             pItem->bitratetype(),
+             pItem->bitrate(),
+             pItem->layer() );
 
     strtag_fileinfo = tmpmap;
 
@@ -863,8 +918,6 @@ void wMain::updateOverlayBG()
 
     uobgmutexd = true;
 
-    Fl::lock();
-
     grpViewer->damage( 1 );
     grpViewer->redraw();
 
@@ -875,8 +928,6 @@ void wMain::updateOverlayBG()
 
     imgOverlayBg = fl_imgtk::drawblurred_widgetimage( grpViewer,
                                                       grpViewer->w() / 50 );
-
-    Fl::unlock();
 
     if ( imgOverlayBg != NULL )
     {
@@ -889,6 +940,11 @@ void wMain::updateOverlayBG()
     if( grpOverlay->visible_r() > 0 )
     {
         grpOverlay->redraw();
+    }
+
+    if ( sclMp3List != NULL )
+    {
+        sclMp3List->bgimg( imgOverlayBg );
     }
 
     uobgmutexd = false;
@@ -976,50 +1032,15 @@ void wMain::switchPlayButton( int state )
 
 void wMain::makePlayList( const char* refdir )
 {
-    string dirpath;
-
-    if ( refdir != NULL )
+    fl_cursor( FL_CURSOR_WAIT );
+    if ( mp3list->AddListDir( refdir ) > 0 )
     {
-        dirpath = refdir;
-
-        DirSearch* dsearch = new DirSearch( dirpath.c_str(), ".mp3" );
-        if ( dsearch != NULL )
-        {
-            vector< string >* plist = dsearch->data();
-            if ( plist->size() > 0 )
-            {
-                for( unsigned cnt=0; cnt<plist->size(); cnt++ )
-                {
-                    string item  = plist->at( cnt );
-                    vector< string >::const_iterator it;
-
-                    it = find( mp3list.begin(), mp3list.end(), item.c_str() );
-                    if ( it == mp3list.end() )
-                    {
-                        mp3list.push_back( item );
-                    }
-                }
-            }
-
-            delete dsearch;
-        }
-    }
-
-    // Let make shuttle LUT !
-    if ( mp3list.size() > 0 )
-    {
-        mp3listLUT.clear();
-        mp3listLUT.resize( mp3list.size() );
-
-        for( unsigned cnt=0; cnt<mp3list.size(); cnt++ )
-        {
-            mp3listLUT[ cnt ] = cnt;
-        }
-
-        std::random_shuffle( mp3listLUT.begin(), mp3listLUT.end() );
+        mp3list->ShufflePlayIndex();
     }
 
     updateTrack();
+
+    fl_cursor( FL_CURSOR_DEFAULT );
 
     mp3queue = 0;
 }
@@ -1033,10 +1054,12 @@ void wMain::playControl( int action )
     {
         case 0 : /// PLAY
             {
-                if ( mp3list.size() > 0 )
+                if ( mp3list->Size() > 0 )
                 {
                     if ( ( _mp3onplaying == false ) && ( _pt == NULL ) )
                     {
+                        _threadkillswitch = false;
+                        _mp3onplaying = false;
                         int ret = pthread_create( &_pt, NULL, pthread_play, this );
                     }
                 }
@@ -1045,7 +1068,7 @@ void wMain::playControl( int action )
 
         case 1: /// STOP.
             {
-                if ( mp3list.size() > 0 )
+                if ( mp3list->Size() > 0 )
                 {
                     if ( ( _mp3onplaying == true ) && ( _pt != NULL ) )
                     {
@@ -1067,8 +1090,30 @@ void wMain::playControl( int action )
                                 aout->Control( AudioOut::STOP, 0, 0 );
                             }
 
-                            _threadkillswitch = false;
                             _mp3onplaying = false;
+                        }
+                    }
+                    else
+                    {
+                        if ( _pt != NULL )
+                        {
+                            _threadkillswitch = true;
+                            pthread_join( _pt, NULL );
+                            _pt = NULL;
+
+                            _threadkillswitch = false;
+
+                            if ( aout != NULL )
+                            {
+                                aout->Control( AudioOut::STOP, 0, 0 );
+                            }
+                        }
+                        else
+                        {
+                            if ( aout != NULL )
+                            {
+                                aout->Control( AudioOut::STOP, 0, 0 );
+                            }
                         }
                     }
                 }
@@ -1077,14 +1122,14 @@ void wMain::playControl( int action )
 
         case 2: /// Previous Track
             {
-                if ( mp3list.size() > 0 )
+                if ( mp3list->Size() > 0 )
                 {
                     playControl( 1 );
                     Sleep( 500 );
 
                     if ( mp3queue == 0 )
                     {
-                        mp3queue = mp3list.size() - 1;
+                        mp3queue = mp3list->Size() - 1;
                     }
                     else
                     {
@@ -1098,14 +1143,14 @@ void wMain::playControl( int action )
 
         case 3: /// Next Track
             {
-                if ( mp3list.size() > 0 )
+                if ( mp3list->Size() > 0 )
                 {
                     playControl( 1 );
                     Sleep( 500 );
 
                     mp3queue++;
 
-                    if( mp3queue >= mp3list.size() )
+                    if( mp3queue >= mp3list->Size() )
                     {
                         mp3queue = 0;
                     }
@@ -1122,26 +1167,43 @@ void wMain::loadArtCover()
     if ( mp3dec == NULL )
         return;
 
-    uchar* img;
-    unsigned imgsz;
+    int idx = mp3list->PlayQueue( mp3queue );
+    Mp3Item* pItem = mp3list->Get( idx );
 
-    if ( mp3dec->GetTag( "art", img, &imgsz ) == false )
+    if ( pItem == NULL )
         return;
+
+    const char* img = pItem->coverart();
+    string imgmime  = pItem->coverartmime();
+    unsigned imgsz  = pItem->coverartsize();
 
     if ( ( img == NULL ) || ( imgsz == 0 ) )
     {
-        if ( img != NULL )
-            free( img );
-
+        setNoArtCover();
         return;
     }
 
     extern unsigned artmasksz;
     extern unsigned char artmask[];
 
-
     Fl_PNG_Image* amaskimg = new Fl_PNG_Image( "artmask", artmask, artmasksz );
-    Fl_JPEG_Image* coverimg = new Fl_JPEG_Image( "art", img );
+    Fl_Image* coverimg = NULL;
+
+    if ( imgmime == "image/jpeg" )
+    {
+        coverimg = (Fl_Image*)new Fl_JPEG_Image( "coverart_jpg", (uchar*)img );
+    }
+    else
+    if ( imgmime == "image/png" )
+    {
+        coverimg = (Fl_Image*)new Fl_PNG_Image( "coverart_png", (uchar*)img, imgsz );
+    }
+
+    if ( coverimg == NULL )
+    {
+        setNoArtCover();
+        return;
+    }
 
     int test_w = boxCoverArt->w();
     int test_h = boxCoverArt->h();
@@ -1294,7 +1356,7 @@ void wMain::WidgetCB( Fl_Widget* w )
     {
         btnPlayStop->deactivate();
 
-        if ( mp3list.size() > 0 )
+        if ( mp3list->Size() > 0 )
         {
             if ( _mp3onplaying == false )
             {
@@ -1318,7 +1380,7 @@ void wMain::WidgetCB( Fl_Widget* w )
     {
         btnPrevTrk->deactivate();
 
-        if ( mp3list.size() > 0 )
+        if ( mp3list->Size() > 0 )
         {
             playControl( 2 );
         }
@@ -1331,7 +1393,7 @@ void wMain::WidgetCB( Fl_Widget* w )
     {
         btnNextTrk->deactivate();
 
-        if ( mp3list.size() > 0 )
+        if ( mp3list->Size() > 0 )
         {
             playControl( 3 );
         }
@@ -1364,24 +1426,45 @@ void wMain::WidgetCB( Fl_Widget* w )
 
     if ( w == btnListCtrl )
     {
+        // Create List of MP3.
         if ( grpOverlay->visible_r() == 0 )
         {
             sclMp3List->clear();
+            liststrs.clear();
 
             int lw = sclMp3List->w() - 40;
 
-            for( unsigned cnt=0; cnt<mp3list.size(); cnt++  )
+            for( unsigned cnt=0; cnt<mp3list->Size(); cnt++  )
             {
-                Fl_Button* newbtn = new Fl_Button( 0,0,lw,20, mp3list[cnt].c_str() );
-                if ( newbtn != NULL )
+                Mp3Item* pItem = mp3list->Get( cnt );
+
+                if ( pItem != NULL )
                 {
-                    newbtn->align( FL_ALIGN_INSIDE | FL_ALIGN_CLIP | FL_ALIGN_RIGHT );
-                    newbtn->color( 0x33333300 );
-                    newbtn->labelcolor( 0xFFFFFF00 );
-                    newbtn->labelfont( FL_FREE_FONT );
-                    newbtn->labelsize( 11 );
-                    sclMp3List->add( newbtn );
-                    newbtn->callback( fl_list_cb, this );
+                    Fl_Button* newbtn = new Fl_Button( 0,0,lw,50 );
+                    if ( newbtn != NULL )
+                    {
+                        char tmpstr[128] = {0};
+
+                        sprintf( tmpstr,
+                                 "%s\n%s - %s ( %s )",
+                                 pItem->title(),
+                                 pItem->artist(),
+                                 pItem->album(),
+                                 pItem->year() );
+
+                        liststrs.push_back( tmpstr );
+
+                        newbtn->align( FL_ALIGN_INSIDE | FL_ALIGN_CLIP | FL_ALIGN_RIGHT );
+                        newbtn->box( FL_NO_BOX );
+                        newbtn->color( 0x33333300 );
+                        newbtn->labelcolor( 0xFFFFFF00 );
+                        newbtn->labelfont( FL_FREE_FONT );
+                        newbtn->labelsize( 12 );
+                        newbtn->label( liststrs[ liststrs.size() - 1 ].c_str() );
+                        newbtn->callback( fl_list_cb, this );
+
+                        sclMp3List->add( newbtn );
+                    }
                 }
             }
 
@@ -1435,6 +1518,9 @@ void wMain::SizedCB( Fl_Widget* w )
 void wMain::DDropCB( Fl_Widget* w )
 {
     const char* testfiles = mainWindow->dragdropfiles();
+#ifdef DEBUG
+    printf("Drag Dropped :\n%s\n", mainWindow->dragdropfiles() );
+#endif // DEBUG
 
     if ( testfiles != NULL )
     {
@@ -1443,7 +1529,9 @@ void wMain::DDropCB( Fl_Widget* w )
 
         for( unsigned cnt=0; cnt<dlist.size(); cnt++)
         {
-            printf("%s\n", dlist[cnt].c_str());
+#ifdef DEBUG
+            printf("Testing dir. : %s\n", dlist[cnt].c_str());
+#endif // DEBUG
             if( DirSearch::DirTest( dlist[cnt].c_str() ) == true )
             {
                 makePlayList( dlist[cnt].c_str() );
@@ -1463,27 +1551,13 @@ void wMain::ListCB( Fl_Widget* w )
     {
         if ( sclMp3List->child( cnt ) == w )
         {
-            playControl( 1 );
-
-            //find LUT
-            int lutpos = -1;
-
-            for( unsigned c2=0; c2<mp3listLUT.size(); c2++ )
-            {
-                if ( mp3listLUT[ c2 ] == cnt )
-                {
-                    lutpos = c2;
-                    break;
-                }
-            }
-
             grpOverlay->hide();
 
-            if ( lutpos >= 0 )
-            {
-                mp3queue = lutpos;
-                playControl( 0 );
-            }
+            playControl( 1 );
+
+            mp3queue = mp3list->FindPlayIndexToListIndex( cnt );
+
+            playControl( 0 );
         }
     }
 }

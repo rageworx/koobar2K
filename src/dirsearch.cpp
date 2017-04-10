@@ -90,7 +90,6 @@ void DirSearch::dirsearch( const char* rootdir, const char* endfix )
                     _filelist.push_back( cfname );
                 }
             }
-
             pDE = readdir( pDIR );
         }
 
