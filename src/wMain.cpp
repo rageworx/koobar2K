@@ -832,44 +832,11 @@ void wMain::loadTags()
             strtag_moreinfo = pItem->genre();
         }
 
-        // file info ---
-        if ( pItem->mode() != NULL )
-        {
-            strtag_fileinfo = pItem->mode();
-        }
-
-        if ( pItem->frequency() > 0 )
-        {
-            sprintf( tmpmap,
-                     " - %.1fKHz",
-                     (float)pItem->frequency() / (float)1000 );
-
-            strtag_fileinfo += tmpmap;
-        }
-
-        if ( pItem->bitrate() != NULL )
-        {
-            sprintf( tmpmap,
-                     " - %dKbps",
-                     pItem->bitrate() );
-
-            strtag_fileinfo += tmpmap;
-        }
-
-        if ( pItem->layer() != NULL )
-        {
-            sprintf( tmpmap,
-                     " - mpeg.l%d",
-                     pItem->layer() );
-
-            strtag_fileinfo += tmpmap;
-        }
 
         boxTitle->label( strtag_title.c_str() );
         boxAlbum->label( strtag_album.c_str() );
         boxArtist->label( strtag_artist.c_str() );
         boxMiscInfo->label( strtag_moreinfo.c_str() );
-        boxFileInfo->label( strtag_fileinfo.c_str() );
 
         updateInfo();
     }
@@ -907,14 +874,38 @@ void wMain::updateInfo()
     if ( pItem == NULL )
         return;
 
-    sprintf( tmpmap, "%d - %.1fKHz - %s - %dKbps - mpeg.l%d",
-             pItem->channels(),
-             (float)pItem->frequency() / (float)1000,
-             pItem->bitratetype(),
-             pItem->bitrate(),
-             pItem->layer() );
+   // file info ---
+    if ( pItem->mode() != NULL )
+    {
+        strtag_fileinfo = pItem->mode();
+    }
 
-    strtag_fileinfo = tmpmap;
+    if ( pItem->frequency() > 0 )
+    {
+        sprintf( tmpmap,
+                 " - %.1fKHz",
+                 (float)pItem->frequency() / (float)1000 );
+
+        strtag_fileinfo += tmpmap;
+    }
+
+    if ( pItem->bitrate() != NULL )
+    {
+        sprintf( tmpmap,
+                 " - %dKbps",
+                 pItem->bitrate() );
+
+        strtag_fileinfo += tmpmap;
+    }
+
+    if ( pItem->layer() != NULL )
+    {
+        sprintf( tmpmap,
+                 " - mpeg.l%d",
+                 pItem->layer() );
+
+        strtag_fileinfo += tmpmap;
+    }
 
     boxFileInfo->label( strtag_fileinfo.c_str() );
 }

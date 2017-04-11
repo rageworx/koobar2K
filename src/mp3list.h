@@ -35,8 +35,12 @@ class Mp3Item
         void artist( const char* s )        { _artist = s; }
         void genre( const char* s )         { _genre = s; }
         void year( const char* s )          { _year = s; }
-        void mode( const unsigned n )       { if ( n < 4 ) _mode = strstro[ n ]; _mode = "NONE"; }
-        void bitratetype( const unsigned n ){ if ( n < 3 ){ _brtype = strbrs[ n ]; _vbr=n; } }
+        void mode( unsigned n )             { if ( n < 4 ) \
+                                              { _mode = strstro[ n ]; } \
+                                              _mode = strstro[0]; }
+        void bitratetype( const unsigned n ){ if ( n < 3 ) \
+                                              { _brtype = strbrs[ n ]; _vbr=n; } \
+                                              _brtype = strbrs[0]; _vbr = 0;}
         void bitrate( const unsigned n )    { _bitrate = n; }
         void abr( const unsigned n )        { _abr = n; }
         void layer( const unsigned n )      { _layer = n; }

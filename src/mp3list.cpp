@@ -97,9 +97,6 @@ long Mp3List::AddListDir( const char* dir )
 
 long Mp3List::AddListFile( const char* fname )
 {
-#ifdef R_DEBUG
-    printf(" AddListFile(%s)\n", fname );
-#endif // R_DEBUG
     if ( fname != NULL )
     {
         string item = fname;
@@ -116,10 +113,6 @@ long Mp3List::AddListFile( const char* fname )
             if ( mpg123_open( mhandle, fname ) == MPG123_OK )
             {
                 newitem->filename( fname );
-
-#ifdef R_DEBUG
-                printf(" newitem->filename(%s)\n", fname );
-#endif // R_DEBUG
 
                 struct mpg123_frameinfo mp3info;
 
