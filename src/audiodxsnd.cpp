@@ -57,7 +57,7 @@ typedef struct
 // Buffer tool ---
 IDirectSoundBuffer* createDSBufferRaw( const char* ref, int chnls, int rate, int size, DSBUFFERDESC &dsdesc );
 bool FillDSound( IDirectSoundBuffer* &dsbuff, const char* ref, int chnls, int rate, int size, DSBUFFERDESC &dsdesc );
-void* pthread_dxa_call( void* p );
+DWORD WINAPI win32_thread_dxa_call( void* p );
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -71,6 +71,7 @@ AudioDXSound::AudioDXSound( HWND hParent, AudioOutEvent* e  )
    _newctrlstate( NONE ),
    _ctrlstate( NONE ),
    _currentbufferque( 0 ),
+   _threadhandle(INVALID_HANDLE_VALUE),
    _threadkeeplived( true )
 {
     for( unsigned cnt=0; cnt<DEF_ADXS_BUFFERS; cnt++ )
@@ -133,7 +134,8 @@ AudioOut::AResult AudioDXSound::InitAudio( unsigned chl, unsigned freq )
 
         hEventBuffer = CreateEvent( NULL, TRUE, FALSE, NULL );
 
-        int reti = pthread_create( &_ptt, NULL, pthread_dxa_call, this );
+        _threadhandle = CreateThread( NULL, 0, win32_thread_dxa_call,
+                                      this, 0, &_threadid );
 
         return OK;
     }
@@ -152,8 +154,7 @@ AudioOut::AResult AudioDXSound::FinalAudio()
     {
         _threadkeeplived = false;
 
-        //pthread_kill( _ptt, NULL );
-        pthread_join( _ptt, NULL );
+        WaitForSingleObject( _threadhandle, INFINITE );
 
         procStop();
 
@@ -277,7 +278,7 @@ AudioOut::AResult AudioDXSound::Control( ControlType ct, unsigned p1, unsigned p
     return OK;
 }
 
-void* AudioDXSound::ThreadCall()
+DWORD AudioDXSound::ThreadCall()
 {
     unsigned            currentbuffer = 0;
     ControlType         currentctrlt  = NONE;
@@ -368,6 +369,8 @@ void* AudioDXSound::ThreadCall()
             Sleep( 1 );
         }
     }
+
+    return 0;
 }
 
 bool AudioDXSound::createNextBuffer( bool flushleft )
@@ -731,7 +734,7 @@ bool FillDSound( IDirectSoundBuffer* &dsbuff, const char* ref, int chnls, int ra
     return true;
 }
 
-void* pthread_dxa_call( void* p )
+DWORD WINAPI win32_thread_dxa_call( void* p )
 {
     if ( p != NULL )
     {
@@ -739,5 +742,5 @@ void* pthread_dxa_call( void* p )
         return adxs->ThreadCall();
     }
 
-    return NULL;
+    return 0;
 }

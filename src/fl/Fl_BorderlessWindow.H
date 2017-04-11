@@ -155,17 +155,21 @@ class Fl_BorderlessWindow : public Fl_Double_Window
     public:
         void procdblclktitle();
         void procwindowmove( int x, int y )
-        { if ( maximized_wh == false ) position( x, y ); }
+            { if ( maximized_wh == false ) position( x, y ); }
         void callback_onmove( Fl_Callback* cb, void* p )
-        { cbOnMove = cb; pdOnMove = p; }
+            { cbOnMove = cb; pdOnMove = p; }
         void callback_onsized( Fl_Callback* cb, void* p )
-        { cbOnSized = cb; pdOnSized = p; }
+            { cbOnSized = cb; pdOnSized = p; }
         void callback_ondropfiles( Fl_Callback* cb, void* p )
-        { cbOnDrop = cb; pdOnDrop = p; }
-        const char* dragdropfiles() { return ddropfiles; }
-        int  dohandle( int e ) { return handle(e); }
+            { cbOnDrop = cb; pdOnDrop = p; }
+        const char* dragdropfiles()
+            { return ddropfiles; }
+        int  dohandle( int e )
+            { return handle(e); }
         int  shown()
-        { return realshown; }
+            { return realshown; }
+        bool maximized()
+            { return maximized_wh; }
 
     protected:
         int  sizegriptest( int x, int y );

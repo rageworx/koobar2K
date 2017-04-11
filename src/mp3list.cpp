@@ -21,12 +21,19 @@ using namespace std;
 #endif
 
 ////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 
 Mp3List::Mp3List()
  : mpg123_result( -1 ),
    mhandle( NULL )
 {
-    mpg123_result = mpg123wrap_init();
+    //mpg123_result = mpg123wrap_init();
     mpars = mpg123_new_pars( &mpg123_result );
     mhandle = mpg123_parnew( mpars, "auto", &mpg123_result );
 
@@ -42,11 +49,24 @@ Mp3List::Mp3List()
 
 Mp3List::~Mp3List()
 {
-    _list.clear();
+    unsigned rsz = _list.size();
+
+    if ( rsz > 0 )
+    {
+        for ( list< Mp3Item* >::const_iterator it = _list.begin(), ep = _list.end();
+              it != ep; it++ )
+        {
+            delete *it;
+        }
+
+        _list.clear();
+    }
+
     _playindex.clear();
 
     //mpg123_exit();
 }
+
 
 long Mp3List::AddListDir( const char* dir )
 {
@@ -77,6 +97,9 @@ long Mp3List::AddListDir( const char* dir )
 
 long Mp3List::AddListFile( const char* fname )
 {
+#ifdef R_DEBUG
+    printf(" AddListFile(%s)\n", fname );
+#endif // R_DEBUG
     if ( fname != NULL )
     {
         string item = fname;
@@ -88,11 +111,15 @@ long Mp3List::AddListFile( const char* fname )
             if ( newitem == NULL )
                 return 0;
 
-            mpg123_param( mhandle, MPG123_ICY_INTERVAL, 0, 0);
+            //mpg123_param( mhandle, MPG123_ICY_INTERVAL, 0, 0);
 
             if ( mpg123_open( mhandle, fname ) == MPG123_OK )
             {
                 newitem->filename( fname );
+
+#ifdef R_DEBUG
+                printf(" newitem->filename(%s)\n", fname );
+#endif // R_DEBUG
 
                 struct mpg123_frameinfo mp3info;
 
@@ -244,22 +271,34 @@ long Mp3List::AddListFile( const char* fname )
                 }
 
                 mpg123_close( mhandle );
+
+                _list.push_back( newitem );
             }
-            _list.push_back( newitem );
+            else
+            {
+                delete newitem;
+            }
         }
     }
 }
 
 long Mp3List::FindByFileName( const char* fname )
 {
+    list< Mp3Item* >::const_iterator it = _list.begin();
+
     for( unsigned cnt=0; cnt<_list.size(); cnt++ )
     {
-        Mp3Item* plist =  _list[ cnt ];
-        const char* diffname = plist->filename();
-        if ( strcmp( diffname, fname ) == 0 )
+        Mp3Item* plist =  *it;
+        if ( plist != NULL )
         {
-            return cnt;
+            const char* diffname = plist->filename();
+            if ( strcmp( diffname, fname ) == 0 )
+            {
+                return cnt;
+            }
         }
+
+        it++;
     }
 
     return -1;
@@ -267,18 +306,55 @@ long Mp3List::FindByFileName( const char* fname )
 
 long Mp3List::FindByTagTitle( const char* tagtitle )
 {
+    list< Mp3Item* >::const_iterator it = _list.begin();
+
     for( unsigned cnt=0; cnt<_list.size(); cnt++ )
     {
-        Mp3Item* plist =  _list[ cnt ];
-        const char* diffname = plist->title();
-        if ( strcmp( diffname, tagtitle ) == 0 )
+        Mp3Item* plist =  *it;
+        if ( plist != NULL )
         {
-            return cnt;
+            const char* diffname = plist->title();
+            if ( strcmp( diffname, tagtitle ) == 0 )
+            {
+                return cnt;
+            }
         }
+
+        it++;
     }
 
     return -1;
 }
+
+const char* Mp3List::FileName( unsigned idx )
+{
+    if ( idx >= _list.size() )
+        return NULL;
+
+    list< Mp3Item* >::const_iterator it = _list.begin();
+
+    advance( it, idx );
+
+    Mp3Item* plist =  *it;
+
+    return plist->filename();
+}
+
+
+Mp3Item* Mp3List::Get( unsigned idx )
+{
+    if ( idx >= _list.size() )
+        return NULL;
+
+    list< Mp3Item* >::const_iterator it = _list.begin();
+
+    advance( it, idx );
+
+    Mp3Item* plist =  *it;
+
+    return plist;
+}
+
 
 void Mp3List::ShufflePlayIndex()
 {

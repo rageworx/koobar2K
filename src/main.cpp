@@ -1,8 +1,13 @@
+#include <cstdio>
+#include <fcntl.h>
+
 #include "wMain.h"
 
 #include <FL/Fl.H>
 #include <FL/Fl_Tooltip.H>
 #include <FL/fl_ask.H>
+
+#include "mpg123wrap.h"
 
 #if ( FL_ABI_VERSION < 10304 )
     #error "Error, FLTK ABI need 1.3.3 or above"
@@ -83,12 +88,32 @@ int main (int argc, char ** argv)
     procAutoLocale();
     presetFLTKenv();
 
+    mpg123wrap_init();
+
+#ifdef R_DEBUG
+    AllocConsole();
+
+    HANDLE handle_out = GetStdHandle(STD_OUTPUT_HANDLE);
+    int hCrt = _open_osfhandle((long) handle_out, _O_TEXT);
+    FILE* hf_out = _fdopen(hCrt, "w");
+    setvbuf(hf_out, NULL, _IONBF, 1);
+    *stdout = *hf_out;
+
+    HANDLE handle_in = GetStdHandle(STD_INPUT_HANDLE);
+    hCrt = _open_osfhandle((long) handle_in, _O_TEXT);
+    FILE* hf_in = _fdopen(hCrt, "r");
+    setvbuf(hf_in, NULL, _IONBF, 128);
+    *stdin = *hf_in;
+#endif // R_DEBUG
+
     wMain* pWMain = new wMain( argc, argv );
 
     if ( pWMain != NULL )
     {
         reti = pWMain->Run();
     }
+
+    mpg123wrap_exit();
 
     return reti;
 }

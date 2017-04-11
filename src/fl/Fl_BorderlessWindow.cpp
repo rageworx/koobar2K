@@ -1222,8 +1222,12 @@ void Fl_BorderlessWindow::WCB( Fl_Widget* w )
 
             regenbgcache( prev_fs_w, prev_fs_h );
             resize( prev_fs_x, prev_fs_y, prev_fs_w, prev_fs_h );
-
             maximized_wh = false;
+
+            if ( cbOnSized != NULL )
+            {
+                cbOnSized( this, pdOnSized );
+            }
         }
         else
         {
@@ -1244,7 +1248,6 @@ void Fl_BorderlessWindow::WCB( Fl_Widget* w )
                         boxWindowButtons[1]->label( NULL );
                     }
                 }
-
             }
 
             int scrn_x;
@@ -1268,8 +1271,12 @@ void Fl_BorderlessWindow::WCB( Fl_Widget* w )
 
             regenbgcache( scrn_w, scrn_h );
             resize( scrn_x, scrn_y, scrn_w, scrn_h );
-
             maximized_wh = true;
+
+            if ( cbOnSized != NULL )
+            {
+                cbOnSized( this, pdOnSized );
+            }
         }
     }
 

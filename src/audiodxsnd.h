@@ -3,7 +3,6 @@
 
 #include "audioout.h"
 #include <windows.h>
-#include <pthread.h>
 #include <vector>
 
 class AudioDXSound : public AudioOut
@@ -28,7 +27,7 @@ class AudioDXSound : public AudioOut
         ControlType ControlState() { return _ctrlstate; }
 
     public:
-        void* ThreadCall();
+        DWORD ThreadCall();
 
     protected:
         bool createNextBuffer( bool flushleft = false );
@@ -48,7 +47,8 @@ class AudioDXSound : public AudioOut
         void*       _dxbuff[2];
         int         _dxbidx_w;
         int         _dxbidx_r;
-        pthread_t   _ptt;
+        HANDLE      _threadhandle;
+        DWORD       _threadid;
         bool        _threadkeeplived;
 
     protected:

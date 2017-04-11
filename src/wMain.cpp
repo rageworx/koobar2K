@@ -226,9 +226,19 @@ void* wMain::PThreadCall()
     unsigned idx = mp3list->PlayQueue( mp3queue );
     const char* mp3fn = mp3list->FileName( idx );
 
-    if ( mp3dec->Open( mp3fn ) == false )
+    if ( mp3fn != NULL )
     {
-        delete aout;
+        if ( mp3dec->Open( mp3fn ) == false )
+        {
+            delete mp3dec;
+            mp3dec = NULL;
+            return NULL;
+        }
+    }
+    else
+    {
+        delete mp3dec;
+        mp3dec = NULL;
         return NULL;
     }
 
@@ -1421,6 +1431,8 @@ void wMain::WidgetCB( Fl_Widget* w )
             lastClk = curClk;
         }
 
+        btnRollUp->hide();
+
         return;
     }
 
@@ -1511,7 +1523,32 @@ void wMain::SizedCB( Fl_Widget* w )
 {
     if ( grpOverlay->visible_r() > 0 )
     {
+        Fl::lock();
         updateOverlayBG();
+        Fl::unlock();
+    }
+
+    // Check rollup button visible.
+    if ( mainWindow->maximized() == true )
+    {
+        if ( btnRollUp != NULL )
+        {
+            if ( btnRollUp->visible_r() > 0 )
+            {
+                btnRollUp->hide();
+            }
+        }
+    }
+    else
+    if ( mainWindow->h() > window_min_h )
+    {
+        if ( btnRollUp != NULL )
+        {
+            if ( btnRollUp->visible_r() == 0 )
+            {
+                btnRollUp->show();
+            }
+        }
     }
 }
 
@@ -1664,6 +1701,7 @@ void fl_redraw_timer_cb( void* p )
 
         if ( p != NULL )
         {
+            Fl::unlock();
             Fl::awake();
         }
 

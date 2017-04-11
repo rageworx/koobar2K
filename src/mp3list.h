@@ -3,6 +3,7 @@
 
 #include "mpg123.h"
 #include <vector>
+#include <list>
 #include <string>
 
 class Mp3Item
@@ -19,7 +20,7 @@ class Mp3Item
                                                 _album.clear();     \
                                                 _genre.clear();     \
                                                 _year.clear();      \
-                                                _mode.clear();      \
+                                                _mode = "NONE";      \
                                                 _brtype.clear();    \
                                                 _coverartmime = "image/none";   \
                                             }
@@ -34,7 +35,7 @@ class Mp3Item
         void artist( const char* s )        { _artist = s; }
         void genre( const char* s )         { _genre = s; }
         void year( const char* s )          { _year = s; }
-        void mode( const unsigned n )       { if ( n < 4 ) _mode = strstro[ n ]; }
+        void mode( const unsigned n )       { if ( n < 4 ) _mode = strstro[ n ]; _mode = "NONE"; }
         void bitratetype( const unsigned n ){ if ( n < 3 ){ _brtype = strbrs[ n ]; _vbr=n; } }
         void bitrate( const unsigned n )    { _bitrate = n; }
         void abr( const unsigned n )        { _abr = n; }
@@ -117,6 +118,8 @@ class Mp3List
         long     AddListFile( const char* fname = NULL );
         long     FindByFileName( const char* fname = NULL );
         long     FindByTagTitle( const char* tagtitle = NULL );
+        const char* FileName( unsigned idx );
+        Mp3Item*    Get( unsigned idx );
 
     public:
         void ShufflePlayIndex();
@@ -126,17 +129,11 @@ class Mp3List
         unsigned Size()                         { return _list.size(); }
         unsigned PlayQueue( unsigned idx )      { if ( idx < _playindex.size() )\
                                                     return _playindex[ idx ]; }
-        const char* FileName( unsigned idx )    { if ( idx < _list.size() )\
-                                                    if ( _list[idx] != NULL )\
-                                                        _list[idx]->filename(); }
-        Mp3Item* Get( unsigned idx )            { if ( idx < _list.size() )\
-                                                    return _list[idx]; }
-
     protected:
         const char* find_v2extras( void* p, const char* tname );
 
     protected:
-        std::vector< Mp3Item* > _list;
+        std::list< Mp3Item* >   _list;
         std::vector< unsigned > _playindex;
 
     protected:

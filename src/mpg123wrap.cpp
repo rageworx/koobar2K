@@ -6,6 +6,8 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <io.h>
+
 #include <string>
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -125,6 +127,12 @@ MPG123Wrap::~MPG123Wrap()
 
 bool MPG123Wrap::Open( const char* path )
 {
+    if ( opend == true )
+        return false;
+
+    if ( access( path, F_OK ) != 0 )
+        return false;
+
     if( MPG123_OK != mpg123_param( mh, MPG123_ICY_INTERVAL, 0, 0) )
     {
         return false;
@@ -145,19 +153,12 @@ bool MPG123Wrap::Open( const char* path )
         mpg123_getformat( mh, &fmt_rate, &fmt_channels, &fmt_encoding );
         fmt_encoding = MPG123_SAMPLESIZE( fmt_encoding );
 
-        unsigned prevs = mpg123_tell( mh );
-
-        mpg123_seek( mh, 0, SEEK_END );
-        filesize = mpg123_tell( mh );
-
-        mpg123_seek( mh, 0, SEEK_SET );
+        filesize = mpg123_length( mh );
 
         opend = true;
 
         return true;
     }
-
-    MessageBox( 0, "MPG123Wrap::Open( const char* path ) failure", "DEBUG", MB_ICONINFORMATION );
 
     return false;
 }
@@ -177,6 +178,7 @@ void MPG123Wrap::Close()
     {
         opend = false;
     }
+
 }
 
 unsigned MPG123Wrap::DecodeFrame( unsigned char* &buffer, bool* nextavailed )
