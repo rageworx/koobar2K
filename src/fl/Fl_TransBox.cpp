@@ -5,7 +5,8 @@ Fl_TransBox::Fl_TransBox(int x, int y, int w, int h, char* l)
  : Fl_Box(x, y, w, h) ,
    alpha(0x80),
    dragEnabled(false),
-   dispimg(NULL)
+   dispimg(NULL),
+   imgdisabled( false )
  {
     box(FL_NO_BOX);
     buffer = new unsigned char[4*w*h];
@@ -25,6 +26,8 @@ Fl_TransBox::~Fl_TransBox()
 
 void Fl_TransBox::color(Fl_Color c)
 {
+    Fl_Box::color( c );
+
     r = (c >> 24);
     g = (c >> 16);
     b = (c >> 8);
@@ -85,22 +88,49 @@ void Fl_TransBox::fill_buffer()
 
 void Fl_TransBox::draw()
 {
-    if ( img != NULL )
+    if ( imgdisabled == false )
     {
-        img->draw( x(), y() );
+        if ( img != NULL )
+        {
+            img->draw( x(), y() );
+        }
+
+        if ( label() != NULL )
+        {
+            Fl_Box::draw_label();
+        }
     }
 
-    if ( label() != NULL )
-    {
-        Fl_Box::draw_label();
-    }
-    else
     if ( dispimg != NULL )
     {
         int putX = ( w() - dispimg->w() ) / 2;
         int putY = ( h() - dispimg->h() ) / 2;
 
         dispimg->draw(x() + putX, y() + putY);
-
     }
+}
+
+void Fl_TransBox::resize( int x, int y, int w, int h )
+{
+    imgdisabled = true;
+
+    Fl_Box::resize( x, y, w, h );
+
+    if ( img != NULL )
+    {
+        delete img;
+        img = NULL;
+    }
+
+    if ( buffer != NULL )
+    {
+        delete buffer;
+        buffer = NULL;
+    }
+
+    buffer = new unsigned char[4*w*h];
+    img = new Fl_RGB_Image(buffer, w, h, 4);
+    color( Fl_Box::color() );
+
+    imgdisabled = false;
 }

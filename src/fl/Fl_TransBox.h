@@ -21,6 +21,7 @@ class Fl_TransBox : public Fl_Box
     protected:
         int handle(int e);
         void draw();
+        void resize( int x, int y, int w, int h );
 
     private:
         void fill_buffer();
@@ -34,6 +35,7 @@ class Fl_TransBox : public Fl_Box
         Fl_RGB_Image* img;
         bool          dragEnabled;
         Fl_Image*     dispimg;
+        bool          imgdisabled;
 
 };
 
