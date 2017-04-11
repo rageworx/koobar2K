@@ -764,6 +764,7 @@ void wMain::createComponents()
         mainWindow->position( mse_x, mse_y );
 
         mainWindow->show();
+        mainWindow->wait_for_expose();
     }
 
     setNoArtCover();
@@ -1534,9 +1535,7 @@ void wMain::SizedCB( Fl_Widget* w )
         }
     }
 
-    Fl::lock();
     mainWindow->redraw();
-    Fl::unlock();
 
     requestWindowRedraw();
 }
@@ -1696,13 +1695,10 @@ void fl_redraw_timer_cb( void* p )
         if ( p != NULL )
         {
             Fl::awake();
+            Fl::redraw();
         }
 
         isflushing = false;
-    }
-    else
-    {
-        Fl::repeat_timeout( 0.05f, fl_redraw_timer_cb, p );
     }
 }
 
