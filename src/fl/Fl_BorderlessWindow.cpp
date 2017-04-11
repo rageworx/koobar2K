@@ -42,6 +42,8 @@ using namespace std;
     #define _MAX(a,b)    (((a)>(b))?(a):(b))
 #endif
 
+//#define DEBUG_FL_BORDERWINDOW_DRAWING_REGION_CHECK
+
 ////////////////////////////////////////////////////////////////////////////////
 
 #ifdef _WIN32
@@ -366,7 +368,6 @@ Fl_BorderlessWindow::Fl_BorderlessWindow( int W, int H, const char* T )
    dragdropenabled( true ),
    dragdroping( false ),
    ddropServer( NULL ),
-   ddropfiles( NULL ),
    backgroundimg( NULL ),
    convtitleiconimg( NULL ),
    backgroundimgcached( NULL )
@@ -510,16 +511,14 @@ Fl_BorderlessWindow::~Fl_BorderlessWindow()
         fl_imgtk::discard_user_rgb_image( backgroundimgcached );
     }
 
+    dragdropenabled = false;
+
     if ( ddropServer != NULL )
     {
         delete ddropServer;
     }
 
-    if ( ddropfiles != NULL )
-    {
-        delete[] ddropfiles;
-        ddropfiles = NULL;
-    }
+    ddropfiles.clear();
 }
 
 void Fl_BorderlessWindow::begin()
@@ -618,6 +617,9 @@ void Fl_BorderlessWindow::draw()
 
 void Fl_BorderlessWindow::procdblclktitle()
 {
+    if ( sizelocked == true )
+        return;
+
     if ( boxWindowButtons[1] != NULL )
     {
         boxWindowButtons[1]->do_callback();
@@ -627,6 +629,9 @@ void Fl_BorderlessWindow::procdblclktitle()
 int Fl_BorderlessWindow::sizegriptest( int x, int y )
 {
     int reti = 0;
+
+    if ( sizelocked == true )
+        return reti;
 
     if ( min_w != max_w )
     {
@@ -778,11 +783,7 @@ int Fl_BorderlessWindow::handle( int e )
             {
                 dragdroping = false;
 
-                if ( ddropfiles != NULL )
-                {
-                    delete[] ddropfiles;
-                    ddropfiles = NULL;
-                }
+                ddropfiles.clear();
 
                 if ( Fl::event_text() != NULL )
                 {
@@ -790,12 +791,7 @@ int Fl_BorderlessWindow::handle( int e )
                     int convsz = strlen( listsrc );
                     if ( convsz >  0 )
                     {
-                        ddropfiles = new char[ convsz ];
-                        if ( ddropfiles != NULL )
-                        {
-                            const char* convstr = fl_utf2mbcs( listsrc );
-                            strcpy( ddropfiles, convstr );
-                        }
+                        ddropfiles = fl_utf2mbcs( listsrc );
                     }
                 }
 
@@ -845,6 +841,7 @@ int Fl_BorderlessWindow::handle( int e )
                 sizegrip_w = 0;
                 sizegrip_h = 0;
 
+                updateddropserver();
                 regenbgcache( wsz_w, wsz_h );
                 redraw();
 
@@ -958,7 +955,7 @@ int Fl_BorderlessWindow::handle( int e )
                     SetWindowLong( hWindow, GWL_EXSTYLE, style);
 
                     //Make black (0x00000000) becomes transparent ...
-                    SetLayeredWindowAttributes(hWindow, 0x00000011, 255, LWA_COLORKEY);
+                    SetLayeredWindowAttributes(hWindow, 0x00FF00FF, 255, LWA_COLORKEY);
 
                     ShowWindow( hWindow, SW_SHOW );
                 }
@@ -1044,6 +1041,14 @@ void Fl_BorderlessWindow::reorders()
         }
 
         a[i++] = ddropServer;
+    }
+}
+
+void Fl_BorderlessWindow::updateddropserver()
+{
+    if ( ddropServer != NULL )
+    {
+        ddropServer->size( w(), h() );
     }
 }
 
@@ -1224,6 +1229,8 @@ void Fl_BorderlessWindow::WCB( Fl_Widget* w )
             resize( prev_fs_x, prev_fs_y, prev_fs_w, prev_fs_h );
             maximized_wh = false;
 
+            updateddropserver();
+
             if ( cbOnSized != NULL )
             {
                 cbOnSized( this, pdOnSized );
@@ -1273,6 +1280,8 @@ void Fl_BorderlessWindow::WCB( Fl_Widget* w )
             resize( scrn_x, scrn_y, scrn_w, scrn_h );
             maximized_wh = true;
 
+            updateddropserver();
+
             if ( cbOnSized != NULL )
             {
                 cbOnSized( this, pdOnSized );
@@ -1297,11 +1306,13 @@ void Fl_BorderlessWindow::clientarea_sizes( int &x, int &y, int &w, int &h )
         w = grpInnerWindow->w();
         h = grpInnerWindow->h();
     }
-
-    x = this->x();
-    y = this->y();
-    w = this->w();
-    h = this->h();
+    else
+    {
+        x = this->x();
+        y = this->y();
+        w = this->w();
+        h = this->h();
+    }
 }
 
 int Fl_BorderlessWindow::clientarea_x()

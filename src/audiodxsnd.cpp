@@ -280,8 +280,8 @@ AudioOut::AResult AudioDXSound::Control( ControlType ct, unsigned p1, unsigned p
 
 DWORD AudioDXSound::ThreadCall()
 {
-    unsigned            currentbuffer = 0;
-    ControlType         currentctrlt  = NONE;
+    unsigned    currentbuffer = 0;
+    ControlType currentctrlt  = NONE;
 
     while( _threadkeeplived == true )
     {
@@ -369,6 +369,9 @@ DWORD AudioDXSound::ThreadCall()
             Sleep( 1 );
         }
     }
+
+    _threadkeeplived = false;
+    _threadhandle = INVALID_HANDLE_VALUE;
 
     return 0;
 }

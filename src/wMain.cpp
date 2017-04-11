@@ -247,13 +247,9 @@ void* wMain::PThreadCall()
     // Display progress to first ...
     OnNewBuffer( 1, 10, 1000000 );
 
-    Fl::lock();
-
     loadTags();
     loadArtCover();
     updateOverlayBG();
-
-    Fl::unlock();
 
     requestWindowRedraw();
 
@@ -703,30 +699,26 @@ void wMain::createComponents()
             mainWindow->clientarea()->resizable( grpViewer );
         }
 
-        //mainWindow->clientarea_sizes( cli_x, cli_y, cli_w, cli_h );
-        cli_x = mainWindow->clientarea_x();
-        cli_y = mainWindow->clientarea_y();
-        cli_w = mainWindow->clientarea_w();
-        cli_h = cli_y + mainWindow->clientarea_h();
+        mainWindow->clientarea_sizes( cli_x, cli_y, cli_w, cli_h );
 
         grpOverlay = new Fl_Group( cli_x, cli_y, cli_w, cli_h );
         if ( grpOverlay != NULL )
         {
-            grpOverlay->box( FL_FLAT_BOX );
+            grpOverlay->box( FL_NO_BOX );
+            grpOverlay->align( FL_ALIGN_CLIP );
             grpOverlay->begin();
 
-            boxOverlayBG = new Fl_Box( cli_x, cli_y, cli_w, cli_h );
+            boxOverlayBG = new Fl_Box( grpOverlay->x(), grpOverlay->y(),
+                                       grpOverlay->w(), grpOverlay->h() );
             if ( boxOverlayBG != NULL )
             {
+                boxOverlayBG->label( NULL );
                 boxOverlayBG->box( FL_NO_BOX );
+                boxOverlayBG->align( FL_ALIGN_CLIP );
             }
 
-            cli_x += 5;
-            cli_y += 10;
-            cli_w -= 10;
-            cli_h -= 50;
-
-            sclMp3List = new Fl_NobackScroll( cli_x, cli_y, cli_w, cli_h );
+            sclMp3List = new Fl_NobackScroll( grpOverlay->x(), grpOverlay->y(),
+                                              grpOverlay->w(), grpOverlay->h());
             if ( sclMp3List != NULL )
             {
                 sclMp3List->end();
@@ -919,6 +911,8 @@ void wMain::updateOverlayBG()
 
     uobgmutexd = true;
 
+    Fl::lock();
+
     grpViewer->damage( 1 );
     grpViewer->redraw();
 
@@ -929,11 +923,6 @@ void wMain::updateOverlayBG()
 
     imgOverlayBg = fl_imgtk::drawblurred_widgetimage( grpViewer,
                                                       grpViewer->w() / 50 );
-
-    if ( imgOverlayBg != NULL )
-    {
-        fl_imgtk::brightbess_ex( imgOverlayBg, -50.f );
-    }
 
     boxOverlayBG->image( imgOverlayBg );
     boxOverlayBG->redraw();
@@ -947,6 +936,8 @@ void wMain::updateOverlayBG()
     {
         sclMp3List->bgimg( imgOverlayBg );
     }
+
+    Fl::unlock();
 
     uobgmutexd = false;
 }
@@ -1449,7 +1440,7 @@ void wMain::WidgetCB( Fl_Widget* w )
                         char tmpstr[128] = {0};
 
                         sprintf( tmpstr,
-                                 "%s\n%s - %s ( %s )",
+                                 "%s\n%s\n%s ( %s )",
                                  pItem->title(),
                                  pItem->artist(),
                                  pItem->album(),
@@ -1459,7 +1450,7 @@ void wMain::WidgetCB( Fl_Widget* w )
 
                         newbtn->align( FL_ALIGN_INSIDE | FL_ALIGN_CLIP | FL_ALIGN_RIGHT );
                         newbtn->box( FL_NO_BOX );
-                        newbtn->color( 0x33333300 );
+                        //newbtn->color( 0x33333300 );
                         newbtn->labelcolor( 0xFFFFFF00 );
                         newbtn->labelfont( FL_FREE_FONT );
                         newbtn->labelsize( 12 );
@@ -1475,6 +1466,7 @@ void wMain::WidgetCB( Fl_Widget* w )
 
             updateOverlayBG();
             grpOverlay->show();
+            mainWindow->locksizing();
 
             return;
         }
@@ -1486,6 +1478,7 @@ void wMain::WidgetCB( Fl_Widget* w )
         if ( grpOverlay->visible_r() > 0 )
         {
             grpOverlay->hide();
+            mainWindow->unlocksizing();
 
             return;
         }
@@ -1514,9 +1507,8 @@ void wMain::SizedCB( Fl_Widget* w )
 {
     if ( grpOverlay->visible_r() > 0 )
     {
-        Fl::lock();
         updateOverlayBG();
-        Fl::unlock();
+        sclMp3List->redraw();
     }
 
     // Check rollup button visible.
@@ -1541,17 +1533,24 @@ void wMain::SizedCB( Fl_Widget* w )
             }
         }
     }
+
+    Fl::lock();
+    mainWindow->redraw();
+    Fl::unlock();
+
+    requestWindowRedraw();
 }
 
 void wMain::DDropCB( Fl_Widget* w )
 {
     const char* testfiles = mainWindow->dragdropfiles();
-#ifdef DEBUG
-    printf("Drag Dropped :\n%s\n", mainWindow->dragdropfiles() );
-#endif // DEBUG
 
     if ( testfiles != NULL )
     {
+#ifdef DEBUG
+        printf("Drag Dropped :\n%s\n", testfiles );
+#endif // DEBUG
+
         string files = testfiles;
         vector<string> dlist = split_string( files, "\n");
 
@@ -1565,6 +1564,8 @@ void wMain::DDropCB( Fl_Widget* w )
                 makePlayList( dlist[cnt].c_str() );
             }
         }
+
+        dlist.clear();
     }
 }
 
@@ -1580,6 +1581,8 @@ void wMain::ListCB( Fl_Widget* w )
         if ( sclMp3List->child( cnt ) == w )
         {
             grpOverlay->hide();
+            mainWindow->unlocksizing();
+            mainWindow->redraw();
 
             playControl( 1 );
 
@@ -1692,7 +1695,6 @@ void fl_redraw_timer_cb( void* p )
 
         if ( p != NULL )
         {
-            Fl::unlock();
             Fl::awake();
         }
 

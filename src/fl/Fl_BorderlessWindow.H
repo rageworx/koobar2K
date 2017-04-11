@@ -19,6 +19,8 @@
 #include <FL/Fl_Image.H>
 #include <FL/Fl_RGB_Image.H>
 
+#include <string>
+
 #ifdef USE_FL_BORDERLESSWINDOW_DRAGDROP_1
 #include "Fl_TransBox.h"
 
@@ -163,7 +165,7 @@ class Fl_BorderlessWindow : public Fl_Double_Window
         void callback_ondropfiles( Fl_Callback* cb, void* p )
             { cbOnDrop = cb; pdOnDrop = p; }
         const char* dragdropfiles()
-            { return ddropfiles; }
+            { return ddropfiles.c_str(); }
         int  dohandle( int e )
             { return handle(e); }
         int  shown()
@@ -178,6 +180,7 @@ class Fl_BorderlessWindow : public Fl_Double_Window
         void releaseconvtitleiconimg();
         void regenbgcache( int w, int h );
         void reorders();
+        void updateddropserver();
 
     protected:
         bool    sizegripped;
@@ -219,7 +222,7 @@ class Fl_BorderlessWindow : public Fl_Double_Window
         void*                       pdOnSized;
         Fl_Callback*                cbOnDrop;
         void*                       pdOnDrop;
-        char*                       ddropfiles;
+        std::string                 ddropfiles;
         Fl_BorderlessDropServer*    ddropServer;
 };
 

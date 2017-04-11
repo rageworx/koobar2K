@@ -274,21 +274,24 @@ void Fl_NobackScroll::bbox(int& X, int& Y, int& W, int& H)
 
 void Fl_NobackScroll::draw()
 {
+    fl_push_clip( x(), y(), w(), h() );
+
+    uchar d = FL_DAMAGE_ALL;
+
+    if ( imgbg != NULL )
+    {
+        imgbg->draw( x(), y() );
+    }
+
     fix_scrollbar_order();
 
     int X,Y,W,H;
     bbox(X,Y,W,H);
 
-    uchar d = FL_DAMAGE_ALL;
-
-    fl_push_clip(X,Y,W,H);
-
-    if ( imgbg != NULL )
-    {
-        imgbg->draw( 0, 0 );
-    }
-
-    fl_pop_clip();
+    if ( X<x() ) X = x();
+    if ( Y<y() ) Y = y();
+    if ( W>w() ) W = w();
+    if ( H>h() ) H = h();
 
     draw_clip(this, X, Y, W, H);
 
@@ -381,6 +384,8 @@ void Fl_NobackScroll::resize(int X, int Y, int W, int H)
     {
         redraw();
     }
+
+    fl_pop_clip();
 }
 
 void Fl_NobackScroll::scroll_to(int X, int Y)
