@@ -119,6 +119,8 @@
 		<Unit filename="src/fl/Fl_BorderlessWindow.cpp" />
 		<Unit filename="src/fl/Fl_FocusEffectButton.H" />
 		<Unit filename="src/fl/Fl_FocusEffectButton.cpp" />
+		<Unit filename="src/fl/Fl_MarqueeLabel.H" />
+		<Unit filename="src/fl/Fl_MarqueeLabel.cpp" />
 		<Unit filename="src/fl/Fl_NobackScroll.H" />
 		<Unit filename="src/fl/Fl_NobackScroll.cpp" />
 		<Unit filename="src/fl/Fl_SeekBar.cpp" />
