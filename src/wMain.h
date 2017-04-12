@@ -14,6 +14,7 @@
 #include "Fl_TransBox.h"
 #include "Fl_FocusEffectButton.H"
 #include "Fl_NobackScroll.H"
+#include "Fl_MarqueeLabel.H"
 
 #include <list>
 #include <vector>
@@ -86,7 +87,7 @@ class wMain : public AudioOutEvent
         Fl_Box*                 boxTrackNo;
         Fl_Box*                 boxArtist;
         Fl_Box*                 boxAlbum;
-        Fl_Box*                 boxTitle;
+        Fl_MarqueeLabel*        boxTitle;
         Fl_Box*                 boxMiscInfo;
         Fl_Box*                 boxFileInfo;
         Fl_Group*               grpControl;

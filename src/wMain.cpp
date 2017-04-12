@@ -427,13 +427,14 @@ void wMain::createComponents()
             boxTrackNo->labelsize( 10 );
         }
 
-        boxTitle = new Fl_Box( cli_x + 10 , cli_y, test_w, 25 );
+        boxTitle = new Fl_MarqueeLabel( cli_x + 10 , cli_y, test_w, 25 );
         if ( boxTitle != NULL )
         {
             boxTitle->label( "No title" );
             boxTitle->labelcolor( 0x33333300 );
             boxTitle->labelfont( FL_FREE_FONT );
             boxTitle->labelsize( 20 );
+            boxTitle->checkcondition();
         }
 
         cli_y += 25;
@@ -825,8 +826,8 @@ void wMain::loadTags()
             strtag_moreinfo = pItem->genre();
         }
 
-
         boxTitle->label( strtag_title.c_str() );
+        boxTitle->checkcondition();
         boxAlbum->label( strtag_album.c_str() );
         boxArtist->label( strtag_artist.c_str() );
         boxMiscInfo->label( strtag_moreinfo.c_str() );
@@ -912,8 +913,6 @@ void wMain::updateOverlayBG()
 
     uobgmutexd = true;
 
-    Fl::lock();
-
     grpViewer->damage( 1 );
     grpViewer->redraw();
 
@@ -922,10 +921,12 @@ void wMain::updateOverlayBG()
         fl_imgtk::discard_user_rgb_image( imgOverlayBg );
     }
 
+    Fl::lock();
     imgOverlayBg = fl_imgtk::drawblurred_widgetimage( grpViewer,
                                                       grpViewer->w() / 50 );
 
     boxOverlayBG->image( imgOverlayBg );
+    Fl::unlock();
     boxOverlayBG->redraw();
 
     if( grpOverlay->visible_r() > 0 )
@@ -935,10 +936,10 @@ void wMain::updateOverlayBG()
 
     if ( sclMp3List != NULL )
     {
+        Fl::lock();
         sclMp3List->bgimg( imgOverlayBg );
+        Fl::unlock();
     }
-
-    Fl::unlock();
 
     uobgmutexd = false;
 }
@@ -967,6 +968,7 @@ void wMain::setNoArtCover()
     imgWinBG = fl_imgtk::makegradation_h( DEF_APP_DEFAULT_W, DEF_APP_DEFAULT_H,
                                           0xCCCCCC00, 0x99999900, true );
 
+    Fl::lock();
     mainWindow->color( 0xCCCCCC00 );
     mainWindow->bgimage( imgWinBG, FL_ALIGN_CENTER );
 
@@ -995,6 +997,13 @@ void wMain::setNoArtCover()
     }
 
     boxCoverArt->image( imgNoArt );
+
+    Fl::unlock();
+
+    boxCoverArt->redraw();
+    mainWindow->redraw();
+
+    requestWindowRedraw();
 
     _mp3art_loaded = false;
 }
@@ -1467,6 +1476,7 @@ void wMain::WidgetCB( Fl_Widget* w )
 
             updateOverlayBG();
             grpOverlay->show();
+            boxTitle->stopupdate();
             mainWindow->locksizing();
 
             return;
@@ -1479,6 +1489,7 @@ void wMain::WidgetCB( Fl_Widget* w )
         if ( grpOverlay->visible_r() > 0 )
         {
             grpOverlay->hide();
+            boxTitle->continueupdate();
             mainWindow->unlocksizing();
 
             return;
@@ -1686,7 +1697,14 @@ void fl_ddrop_cb( Fl_Widget* w, void* p )
 void fl_redraw_timer_cb( void* p )
 {
     // Simple mutex.
+    static bool isfirst = true;
     static bool isflushing = false;
+
+    if ( isfirst == true )
+    {
+        isfirst = false;
+        return;
+    }
 
     if ( isflushing == false )
     {
@@ -1694,8 +1712,14 @@ void fl_redraw_timer_cb( void* p )
 
         if ( p != NULL )
         {
-            Fl::awake();
+            while( Fl::wait() > 0 )
+            {
+                Fl::thread_message();
+            }
+            Fl::lock();
             Fl::redraw();
+            Fl::unlock();
+            Fl::awake();
         }
 
         isflushing = false;
