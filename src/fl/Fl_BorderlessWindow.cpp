@@ -367,6 +367,7 @@ Fl_BorderlessWindow::Fl_BorderlessWindow( int W, int H, const char* T )
    sizelocked( false ),
    dragdropenabled( true ),
    dragdroping( false ),
+   stickymax( false ),
    ddropServer( NULL ),
    backgroundimg( NULL ),
    convtitleiconimg( NULL ),
@@ -1052,6 +1053,51 @@ void Fl_BorderlessWindow::updateddropserver()
     }
 }
 
+void Fl_BorderlessWindow::showscreencenter()
+{
+    // put it center of current desktop.
+    int mse_x = 0;
+    int mse_y = 0;
+
+    Fl::get_mouse( mse_x, mse_y );
+
+    int dsk_n = Fl::screen_num( mse_x, mse_y );
+    int dsk_x = 0;
+    int dsk_y = 0;
+    int dsk_w = 0;
+    int dsk_h = 0;
+
+    Fl::screen_work_area( dsk_x, dsk_y, dsk_w, dsk_h, dsk_n );
+
+    int win_p_x = 0;
+    int win_p_y = 0;
+
+    if ( dsk_x >= 0 )
+    {
+        win_p_x = ( dsk_w - w() ) / 2;
+    }
+    else
+    {
+        win_p_x = ( -dsk_w - w() ) / 2;
+    }
+
+    if ( dsk_y >= 0 )
+    {
+        win_p_y = ( dsk_h - h() ) / 2;
+    }
+    else
+    {
+        win_p_y = ( -dsk_h - h() ) / 2;
+    }
+
+    position( win_p_x, win_p_y );
+
+    if ( shown() == 0 )
+    {
+        show();
+    }
+}
+
 void Fl_BorderlessWindow::setsinglewindow( int stype )
 {
     int cmax = 2;
@@ -1207,7 +1253,7 @@ void Fl_BorderlessWindow::WCB( Fl_Widget* w )
         iconize();
     }
 
-    if ( w == boxWindowButtons[1] )
+    if ( w == boxWindowButtons[1] ) /// Maximize or Resize to normal.
     {
         if ( maximized_wh == true )
         {
@@ -1257,27 +1303,77 @@ void Fl_BorderlessWindow::WCB( Fl_Widget* w )
                 }
             }
 
+            int mse_x = 0;
+            int mse_y = 0;
+
+            Fl::get_mouse( mse_x, mse_y );
+
+            int scrn_n = Fl::screen_num( mse_x, mse_y );
             int scrn_x;
             int scrn_y;
             int scrn_w;
             int scrn_h;
+            int put_x;
+            int put_y;
+            int put_w;
+            int put_h;
 
-            Fl::screen_work_area( scrn_x, scrn_y, scrn_w, scrn_h );
+            Fl::screen_work_area( scrn_x, scrn_y, scrn_w, scrn_h, scrn_n );
 
             if ( ( max_w > 0 ) && ( max_w == min_w ) )
             {
-                scrn_x = x();
-                scrn_w = max_w;
+                put_x = x();
+                put_w = max_w;
+            }
+            else
+            {
+                put_x = scrn_x;
+                put_w = max_w;
             }
 
             if ( ( max_h > 0 ) && ( max_h == min_h ) )
             {
-                scrn_y = y();
-                scrn_h = max_h;
+                put_y = y();
+                put_h = max_h;
+            }
+            else
+            {
+                put_y = scrn_y;
+                put_h = scrn_h;
             }
 
-            regenbgcache( scrn_w, scrn_h );
-            resize( scrn_x, scrn_y, scrn_w, scrn_h );
+            /// check sticky option.
+
+            if ( ( stickymax == true ) && ( scrn_w != put_w ) )
+            {
+                int cntr_w = ( scrn_w - put_w ) / 2;
+
+                if ( put_x >= 0 )
+                {
+                    if( put_x > cntr_w )
+                    {
+                        put_x = scrn_w - put_w;
+                    }
+                    else
+                    {
+                        put_x = 0;
+                    }
+                }
+                else
+                {
+                    if ( put_x > -cntr_w )
+                    {
+                        put_x = scrn_x + ( scrn_w - max_w );
+                    }
+                    else
+                    {
+                        put_x = scrn_x;
+                    }
+                }
+            }
+
+            regenbgcache( put_w, put_h );
+            resize( put_x, put_y, put_w, put_h );
             maximized_wh = true;
 
             updateddropserver();

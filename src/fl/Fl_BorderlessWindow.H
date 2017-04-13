@@ -116,6 +116,7 @@ class Fl_BorderlessWindow : public Fl_Double_Window
         static void Fl_BorderlessWindow_CB( Fl_Widget* w, void* p );
 
     public:
+        void showscreencenter();
         void setsinglewindow( int stype = 0 );
         void setcleartype( bool b );
         void titleicon( Fl_Image* i );
@@ -172,6 +173,7 @@ class Fl_BorderlessWindow : public Fl_Double_Window
             { return realshown; }
         bool maximized()
             { return maximized_wh; }
+        void sitckymaximize( bool t )   { stickymax = t; }
 
     protected:
         int  sizegriptest( int x, int y );
@@ -204,6 +206,7 @@ class Fl_BorderlessWindow : public Fl_Double_Window
         bool    sizelocked;
         bool    dragdropenabled;
         bool    dragdroping;
+        bool    stickymax;
 
     private:
         Fl_Boxtype                  defaultboxtype;

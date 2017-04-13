@@ -63,7 +63,6 @@ class wMain : public AudioOutEvent
         void makePlayList( const char* refdir = NULL );
         void playControl( int action );
         unsigned image_color_illum( Fl_RGB_Image* img );
-        void requestWindowRedraw();
 
     protected:
         int     _argc;
@@ -118,6 +117,7 @@ class wMain : public AudioOutEvent
         unsigned                mp3dpos_cur;
         unsigned                mp3dpos_max;
         unsigned                window_min_h;
+        unsigned                ui_locks;
         std::string             strinf_trackno;
         std::string             strtag_artist;
         std::string             strtag_title;

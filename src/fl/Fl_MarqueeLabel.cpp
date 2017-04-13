@@ -3,6 +3,7 @@
 
 ////////////////////////////////////////////////////////////////////////////////
 
+static int  fl_marqueelabel_timermxt = 0;
 static void fl_marqueelabel_timercb( void* p );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -20,15 +21,18 @@ Fl_MarqueeLabel::Fl_MarqueeLabel( int x, int y, int w, int h, const char* l )
    put_w( 0 ),
    put_h( 0 ),
    updating( true ),
-   timered( false )
+   timered( false ),
+   drawbyme( true )
 {
     Fl_Box::box( FL_NO_BOX );
     Fl_Box::align( FL_ALIGN_INSIDE | FL_ALIGN_LEFT );
+
+    Fl::add_timeout( marquee_interval, fl_marqueelabel_timercb, this );
 }
 
 Fl_MarqueeLabel::~Fl_MarqueeLabel()
 {
-
+    Fl::remove_timeout( fl_marqueelabel_timercb, this );
 }
 
 void Fl_MarqueeLabel::draw()
@@ -83,7 +87,6 @@ void Fl_MarqueeLabel::timercb()
         resettimer( true );
     }
 
-
     if ( needmarquee == true )
     {
         switch( marqueedirection )
@@ -105,16 +108,12 @@ void Fl_MarqueeLabel::timercb()
                 break;
         }
 
-        if ( updating == true )
+        if ( ( updating == true ) && ( drawbyme == true ) )
         {
             redraw();
         }
 
         Fl::repeat_timeout( marquee_interval, fl_marqueelabel_timercb, this );
-    }
-    else
-    {
-        Fl::remove_timeout( fl_marqueelabel_timercb, this );
     }
 }
 
@@ -158,10 +157,6 @@ void Fl_MarqueeLabel::checkcondition()
             if ( timered == false )
             {
                 timered = true;
-                Fl::add_timeout( marquee_interval, fl_marqueelabel_timercb, this );
-            }
-            else
-            {
                 Fl::repeat_timeout( marquee_interval, fl_marqueelabel_timercb, this );
             }
         }
@@ -175,7 +170,7 @@ void Fl_MarqueeLabel::checkcondition()
 
         resettimer();
 
-        if ( updating == true )
+        if ( ( updating == true ) && ( drawbyme == true ) )
         {
             redraw();
         }
@@ -184,10 +179,9 @@ void Fl_MarqueeLabel::checkcondition()
 
 void Fl_MarqueeLabel::resettimer( bool force )
 {
-    if ( timered == true )
+    if ( ( timered == true ) || ( force == true ) )
     {
         timered = false;
-        Fl::remove_timeout( fl_marqueelabel_timercb, this );
     }
 }
 
@@ -199,7 +193,12 @@ void fl_marqueelabel_timercb( void* p )
 {
     if ( p != NULL )
     {
+        if ( fl_marqueelabel_timermxt > 0  )
+            return;
+
+        fl_marqueelabel_timermxt ++;
         Fl_MarqueeLabel* pfml = (Fl_MarqueeLabel*)p;
         pfml->timercb();
+        fl_marqueelabel_timermxt --;
     }
 }

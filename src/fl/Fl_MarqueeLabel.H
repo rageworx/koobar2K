@@ -11,19 +11,23 @@ class Fl_MarqueeLabel : public Fl_Box
         Fl_MarqueeLabel( int x, int y, int w, int h, const char* l = 0 );
         ~Fl_MarqueeLabel();
 
-    public: /// overrides --
+    public: /// overrides in public
         void label( const char* l = 0 );
-        void draw();
-        void resize( int x, int y, int w, int h );
 
     public:
         void timercb();
         void stopupdate()       { updating = false; }
         void continueupdate()   { updating = true; }
+        void drawself( bool t)  { drawbyme = t; }
+        bool drawself()         { return drawbyme; }
 
     public:
         void checkcondition();
         void resettimer( bool force = false );
+
+    private: /// overrides in private.
+        void draw();
+        void resize( int x, int y, int w, int h );
 
     protected:
         bool    needmarquee;
@@ -36,6 +40,7 @@ class Fl_MarqueeLabel : public Fl_Box
         int     put_h;
         bool    updating;
         bool    timered;
+        bool    drawbyme;
 };
 
 #endif /// of __FL_MARQUEELABEL_H__

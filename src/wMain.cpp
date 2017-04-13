@@ -34,6 +34,8 @@ using namespace fl_imgtk;
 #define DEF_APP_NAME            "FLTK MPG123 GUI"
 #define DEF_APP_DEFAULT_W       400
 #define DEF_APP_DEFAULT_H       600
+#define UI_LOCK()               if ( ui_locks>=0 ) { Fl::lock();ui_locks++; }
+#define UI_UNLOCK()             if ( ui_locks>0 ) { Fl::unlock();ui_locks--; }
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -42,7 +44,6 @@ void fl_list_cb( Fl_Widget* w, void* p );
 void fl_move_cb( Fl_Widget* w, void* p );
 void fl_sized_cb( Fl_Widget* w, void* p );
 void fl_ddrop_cb( Fl_Widget* w, void* p );
-void fl_redraw_timer_cb( void* p );
 void fl_delayed_work_timer_cb( void* p );
 
 void* pthread_play( void* p );
@@ -80,6 +81,7 @@ wMain::wMain( int argc, char** argv )
    _mp3art_loaded( false),
    _mp3onplaying( false ),
    _mp3controlnext( -1 ),
+   ui_locks( 0 ),
    imgWinBG( NULL ),
    imgNoArt( NULL ),
    imgOverlayBg( NULL ),
@@ -131,6 +133,7 @@ wMain::wMain( int argc, char** argv )
     // Init audio.
     HWND hParent = fl_xid( mainWindow );
 
+    // default set to 44KHz stereo.
     mp3_frequency = 44100;
     mp3_channels  = 2;
 
@@ -143,8 +146,6 @@ wMain::wMain( int argc, char** argv )
 
     mp3list = new Mp3List();
 
-    // Registering timer.
-    Fl::add_timeout( 0.1f, fl_redraw_timer_cb, this );
 }
 
 wMain::~wMain()
@@ -155,9 +156,6 @@ wMain::~wMain()
 
     if ( mp3list != NULL )
         delete mp3list;
-
-    // Removing timer.
-    Fl::remove_timeout( fl_redraw_timer_cb );
 
     if ( aout != NULL )
     {
@@ -250,10 +248,8 @@ void* wMain::PThreadCall()
     loadTags();
     loadArtCover();
     updateOverlayBG();
-
-    requestWindowRedraw();
-
-    //MessageBox( fl_xid( mainWindow ), "11111", "DEBUG", MB_ICONINFORMATION );
+    Fl::awake();
+    mainWindow->redraw();
 
     unsigned failure_count = 0;
 
@@ -291,7 +287,7 @@ void* wMain::PThreadCall()
                     if ( _mp3onplaying == false )
                     {
                         aout->Control( AudioOut::PLAY, 0, 0 );
-                        //bPlayed = true;
+
                         if ( aout->ControlState() == AudioOut::PLAY )
                         {
                             switchPlayButton( 1 );
@@ -323,6 +319,7 @@ void* wMain::PThreadCall()
         }
         else
         {
+            // Give 10ms wait to thread for thread noop.
             Sleep( 10 );
         }
     }
@@ -417,16 +414,6 @@ void wMain::createComponents()
 
         cli_y += 3;
 
-        boxTrackNo = new Fl_Box( cli_x + 10 , cli_y, test_w, 30 );
-        if ( boxTrackNo != NULL )
-        {
-            boxTrackNo->align( FL_ALIGN_INSIDE | FL_ALIGN_TOP_RIGHT );
-            boxTrackNo->labelfont( FL_COURIER_ITALIC );
-            boxTrackNo->label( "000/000" );
-            boxTrackNo->labelcolor( 0x33333300 );
-            boxTrackNo->labelsize( 10 );
-        }
-
         boxTitle = new Fl_MarqueeLabel( cli_x + 10 , cli_y, test_w, 25 );
         if ( boxTitle != NULL )
         {
@@ -434,6 +421,7 @@ void wMain::createComponents()
             boxTitle->labelcolor( 0x33333300 );
             boxTitle->labelfont( FL_FREE_FONT );
             boxTitle->labelsize( 20 );
+            //boxTitle->drawself( false );
             boxTitle->checkcondition();
         }
 
@@ -472,26 +460,36 @@ void wMain::createComponents()
 
         cli_y += 15;
 
-        boxFileInfo = new Fl_Box( cli_x + 10 , cli_y, test_w, 15 );
+        boxFileInfo = new Fl_Box( cli_x + 10 , cli_y, test_w, 13 );
         if ( boxFileInfo != NULL )
         {
             boxFileInfo->label( "No file information" );
             boxFileInfo->labelcolor( 0x33333300 );
             boxFileInfo->labelfont( FL_FREE_FONT );
-            boxFileInfo->labelsize( 12 );
+            boxFileInfo->labelsize( 11 );
         }
 
-        cli_y += 15;
+        cli_y += 13;
 
-        // Last empty box for resize NULL container.
-        // height = 5
-        Fl_Box* testempty = new Fl_Box(  cli_x , cli_y, cli_w, 5 );
-        if ( testempty != NULL )
+        boxTrackNo = new Fl_Box(  cli_x , cli_y, cli_w, 10, "000/000" );
+        if ( boxTrackNo != NULL )
         {
-            grpViewer->resizable( testempty );
+            boxTrackNo->align( FL_ALIGN_INSIDE | FL_ALIGN_CENTER );
+            boxTrackNo->labelfont( FL_FREE_FONT );
+            boxTrackNo->labelcolor( 0x33333300 );
+            boxTrackNo->labelsize( 10 );
         }
 
-        cli_y += 5;
+        cli_y += 10;
+
+        Fl_Box* boxsizer = new Fl_Box( cli_x, cli_y, cli_w, 1 );
+        if ( boxsizer != NULL )
+        {
+            boxsizer->box( FL_NO_BOX );
+            grpViewer->resizable( boxsizer );
+        }
+
+        cli_y += 1;
 
         // Here control panel.
         // Let make 5 pixel left for Fl_BorderlessWindow can size grip works.
@@ -606,9 +604,6 @@ void wMain::createComponents()
 
             ctrlx = 10;
             ctrly = grpControl->y() + 10;
-
-            //extern unsigned pngimg_ctrl_config_size;
-            //extern unsigned char pngimg_ctrl_config[];
 
             btnRollUp = new Fl_FocusEffectButton( ctrlx, ctrly, 20, 20, "^" );
             if ( btnRollUp != NULL )
@@ -742,29 +737,8 @@ void wMain::createComponents()
 
         mainWindow->size_range( DEF_APP_DEFAULT_W, window_min_h, DEF_APP_DEFAULT_W );
 
-        // put it center of current desktop.
-        int dsk_x = 0;
-        int dsk_y = 0;
-        int dsk_w = 0;
-        int dsk_h = 0;
-
-        /*
-        Fl::screen_work_area( dsk_x, dsk_y, dsk_w, dsk_h );
-
-        int win_p_x = ( ( dsk_w - dsk_x ) - DEF_APP_DEFAULT_W ) / 2;
-        int win_p_y = ( ( dsk_h - dsk_y ) - DEF_APP_DEFAULT_H ) / 2;
-
-        mainWindow->position( win_p_x, win_p_y );
-        */
-
-        int mse_x;
-        int mse_y;
-
-        Fl::get_mouse( mse_x, mse_y );
-
-        mainWindow->position( mse_x, mse_y );
-
-        mainWindow->show();
+        mainWindow->sitckymaximize( true );
+        mainWindow->showscreencenter();
         mainWindow->wait_for_expose();
     }
 
@@ -826,13 +800,16 @@ void wMain::loadTags()
             strtag_moreinfo = pItem->genre();
         }
 
+        UI_LOCK();
         boxTitle->label( strtag_title.c_str() );
-        boxTitle->checkcondition();
         boxAlbum->label( strtag_album.c_str() );
         boxArtist->label( strtag_artist.c_str() );
         boxMiscInfo->label( strtag_moreinfo.c_str() );
+        UI_UNLOCK();
 
         updateInfo();
+
+        boxTitle->checkcondition();
     }
 
 }
@@ -852,6 +829,7 @@ void wMain::updateTrack()
     {
         strinf_trackno = "000/000";
     }
+
     boxTrackNo->label( strinf_trackno.c_str() );
 }
 
@@ -883,6 +861,12 @@ void wMain::updateInfo()
         strtag_fileinfo += tmpmap;
     }
 
+    if ( pItem->bitratetype() != NULL )
+    {
+        strtag_fileinfo += " - ";
+        strtag_fileinfo += pItem->bitratetype();
+    }
+
     if ( pItem->bitrate() != NULL )
     {
         sprintf( tmpmap,
@@ -901,7 +885,9 @@ void wMain::updateInfo()
         strtag_fileinfo += tmpmap;
     }
 
+    UI_LOCK();
     boxFileInfo->label( strtag_fileinfo.c_str() );
+    UI_UNLOCK();
 }
 
 void wMain::updateOverlayBG()
@@ -921,12 +907,13 @@ void wMain::updateOverlayBG()
         fl_imgtk::discard_user_rgb_image( imgOverlayBg );
     }
 
-    Fl::lock();
+    UI_LOCK();
     imgOverlayBg = fl_imgtk::drawblurred_widgetimage( grpViewer,
                                                       grpViewer->w() / 50 );
 
     boxOverlayBG->image( imgOverlayBg );
-    Fl::unlock();
+    UI_UNLOCK();
+
     boxOverlayBG->redraw();
 
     if( grpOverlay->visible_r() > 0 )
@@ -936,9 +923,9 @@ void wMain::updateOverlayBG()
 
     if ( sclMp3List != NULL )
     {
-        Fl::lock();
+        UI_LOCK();
         sclMp3List->bgimg( imgOverlayBg );
-        Fl::unlock();
+        UI_UNLOCK();
     }
 
     uobgmutexd = false;
@@ -968,7 +955,7 @@ void wMain::setNoArtCover()
     imgWinBG = fl_imgtk::makegradation_h( DEF_APP_DEFAULT_W, DEF_APP_DEFAULT_H,
                                           0xCCCCCC00, 0x99999900, true );
 
-    Fl::lock();
+    UI_LOCK();
     mainWindow->color( 0xCCCCCC00 );
     mainWindow->bgimage( imgWinBG, FL_ALIGN_CENTER );
 
@@ -998,12 +985,10 @@ void wMain::setNoArtCover()
 
     boxCoverArt->image( imgNoArt );
 
-    Fl::unlock();
-
     boxCoverArt->redraw();
     mainWindow->redraw();
 
-    requestWindowRedraw();
+    UI_UNLOCK();
 
     _mp3art_loaded = false;
 }
@@ -1126,8 +1111,14 @@ void wMain::playControl( int action )
             {
                 if ( mp3list->Size() > 0 )
                 {
-                    playControl( 1 );
-                    Sleep( 500 );
+                    bool playedcntrl = false;
+
+                    if ( _mp3onplaying == true )
+                    {
+                        playedcntrl = true;
+                        playControl( 1 );
+                        Sleep( 200 );
+                    }
 
                     if ( mp3queue == 0 )
                     {
@@ -1138,7 +1129,10 @@ void wMain::playControl( int action )
                         mp3queue--;
                     }
 
-                    playControl( 0 );
+                    if ( ( playedcntrl == true ) || ( _mp3controlnext == true ) )
+                    {
+                        playControl( 0 );
+                    }
                 }
             }
             break;
@@ -1147,8 +1141,14 @@ void wMain::playControl( int action )
             {
                 if ( mp3list->Size() > 0 )
                 {
-                    playControl( 1 );
-                    Sleep( 500 );
+                    bool playedcntrl = false;
+
+                    if ( _mp3onplaying == true )
+                    {
+                        playedcntrl = true;
+                        playControl( 1 );
+                        Sleep( 200 );
+                    }
 
                     mp3queue++;
 
@@ -1157,7 +1157,10 @@ void wMain::playControl( int action )
                         mp3queue = 0;
                     }
 
-                    playControl( 0 );
+                    if ( ( playedcntrl == true ) || ( _mp3controlnext == true ) )
+                    {
+                        playControl( 0 );
+                    }
                 }
             }
             break;
@@ -1267,8 +1270,6 @@ void wMain::loadArtCover()
 
             mainWindow->refreshcontrolbuttonsimages();
 
-            mainWindow->redraw();
-
             _mp3art_loaded = true;
         }
 
@@ -1305,6 +1306,8 @@ void wMain::loadArtCover()
 
         setNoArtCover();
     }
+
+    mainWindow->redraw();
 }
 
 unsigned wMain::image_color_illum( Fl_RGB_Image* img )
@@ -1335,11 +1338,6 @@ unsigned wMain::image_color_illum( Fl_RGB_Image* img )
     }
 
     return 0;
-}
-
-void wMain::requestWindowRedraw()
-{
-    Fl::repeat_timeout( 0.05f, fl_redraw_timer_cb, this );
 }
 
 void wMain::applyThemes()
@@ -1547,8 +1545,6 @@ void wMain::SizedCB( Fl_Widget* w )
     }
 
     mainWindow->redraw();
-
-    requestWindowRedraw();
 }
 
 void wMain::DDropCB( Fl_Widget* w )
@@ -1590,9 +1586,9 @@ void wMain::ListCB( Fl_Widget* w )
     {
         if ( sclMp3List->child( cnt ) == w )
         {
-            grpOverlay->hide();
             mainWindow->unlocksizing();
-            mainWindow->redraw();
+            grpOverlay->hide();
+            Fl::wait( 1 );
 
             playControl( 1 );
 
@@ -1625,23 +1621,34 @@ void wMain::OnNewBuffer( unsigned position, unsigned nbsz, unsigned maxposition 
 
         skbProgress->update();
         skbProgress->redraw();
+    }
+
+    if ( ui_locks == 0 )
+    {
         mainWindow->redraw();
-        requestWindowRedraw();
+        Fl::awake();
     }
 }
 
 void wMain::OnBufferEnd()
 {
+#ifdef DEBUG
+    printf("void wMain::OnBufferEnd()\n_mp3controlnext = %d", _mp3controlnext );
+#endif // DEBUG
     playControl( 1 );
 
     // Check for next doing.
     if ( _mp3controlnext == 1 )
     {
         // Next track.
-        playControl( 2 );
+        playControl( 3 );
     }
 
-    requestWindowRedraw();
+    if ( ui_locks == 0 )
+    {
+        mainWindow->redraw();
+        Fl::awake();
+    }
 }
 
 
@@ -1691,38 +1698,6 @@ void fl_ddrop_cb( Fl_Widget* w, void* p )
     {
         wMain* wm = (wMain*)p;
         wm->DDropCB( w );
-    }
-}
-
-void fl_redraw_timer_cb( void* p )
-{
-    // Simple mutex.
-    static bool isfirst = true;
-    static bool isflushing = false;
-
-    if ( isfirst == true )
-    {
-        isfirst = false;
-        return;
-    }
-
-    if ( isflushing == false )
-    {
-        isflushing = true;
-
-        if ( p != NULL )
-        {
-            while( Fl::wait() > 0 )
-            {
-                Fl::thread_message();
-            }
-            Fl::lock();
-            Fl::redraw();
-            Fl::unlock();
-            Fl::awake();
-        }
-
-        isflushing = false;
     }
 }
 
