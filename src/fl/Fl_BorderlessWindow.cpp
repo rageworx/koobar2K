@@ -942,6 +942,9 @@ int Fl_BorderlessWindow::handle( int e )
                     // normal window style ...
                     style = GetWindowLong( hWindow, GWL_STYLE );
                     style &= ~WS_POPUP;
+                    style &= ~WS_CAPTION;
+                    style &= ~WS_CHILD;
+                    style |= WS_SYSMENU;
                     style |= CS_DROPSHADOW;
 
                     SetWindowLong( hWindow, GWL_STYLE, style );
@@ -950,12 +953,13 @@ int Fl_BorderlessWindow::handle( int e )
                     style = GetWindowLong( hWindow, GWL_EXSTYLE );
 
                     style &= ~WS_EX_TOOLWINDOW;
+                    style != WS_EX_APPWINDOW;
                     style |= WS_EX_LAYERED;
                     style |= WS_VISIBLE;
 
                     SetWindowLong( hWindow, GWL_EXSTYLE, style);
 
-                    //Make black (0x00000000) becomes transparent ...
+                    //Make black (0x00FF00FF) becomes transparent ...
                     SetLayeredWindowAttributes(hWindow, 0x00FF00FF, 255, LWA_COLORKEY);
 
                     ShowWindow( hWindow, SW_SHOW );
