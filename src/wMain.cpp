@@ -34,8 +34,14 @@ using namespace fl_imgtk;
 #define DEF_APP_NAME            "FLTK MPG123 GUI"
 #define DEF_APP_DEFAULT_W       400
 #define DEF_APP_DEFAULT_H       600
+
+#ifdef DEBUG
+#define UI_LOCK();              if ( ui_locks>=0 ) { Fl::lock();ui_locks++; printf("ui_locks=%d\n",ui_locks); }
+#define UI_UNLOCK();            if ( ui_locks>0 ) { Fl::unlock();ui_locks--; printf("ui_locks=%d\n",ui_locks); }
+#else
 #define UI_LOCK()               if ( ui_locks>=0 ) { Fl::lock();ui_locks++; }
 #define UI_UNLOCK()             if ( ui_locks>0 ) { Fl::unlock();ui_locks--; }
+#endif // DEBUG
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -145,7 +151,6 @@ wMain::wMain( int argc, char** argv )
     }
 
     mp3list = new Mp3List();
-
 }
 
 wMain::~wMain()
@@ -194,11 +199,8 @@ int wMain::Run()
         }
     }
 
-    if ( mp3list->Size() > 0 )
-    {
-        mainWindow->deactivate();
-        Fl::add_timeout( 0.5f, fl_delayed_work_timer_cb, this );
-    }
+    mainWindow->deactivate();
+    Fl::add_timeout( 0.5f, fl_delayed_work_timer_cb, this );
 
     return Fl::run();
 }
@@ -248,7 +250,8 @@ void* wMain::PThreadCall()
     loadTags();
     loadArtCover();
     updateOverlayBG();
-    Fl::awake();
+
+    Fl::awake( mainWindow );
     mainWindow->redraw();
 
     unsigned failure_count = 0;
@@ -801,13 +804,19 @@ void wMain::loadTags()
         }
 
         UI_LOCK();
+
+        mainWindow->lock();
+
         boxTitle->label( strtag_title.c_str() );
         boxAlbum->label( strtag_album.c_str() );
         boxArtist->label( strtag_artist.c_str() );
         boxMiscInfo->label( strtag_moreinfo.c_str() );
-        UI_UNLOCK();
 
         updateInfo();
+
+        mainWindow->unlock();
+        UI_UNLOCK();
+
 
         boxTitle->checkcondition();
     }
@@ -830,7 +839,9 @@ void wMain::updateTrack()
         strinf_trackno = "000/000";
     }
 
+    UI_LOCK();
     boxTrackNo->label( strinf_trackno.c_str() );
+    UI_UNLOCK();
 }
 
 void wMain::updateInfo()
@@ -899,27 +910,24 @@ void wMain::updateOverlayBG()
 
     uobgmutexd = true;
 
+    UI_LOCK();
+    mainWindow->lock();
     grpViewer->damage( 1 );
     grpViewer->redraw();
 
-    if ( imgOverlayBg != NULL )
-    {
-        fl_imgtk::discard_user_rgb_image( imgOverlayBg );
-    }
+    fl_imgtk::discard_user_rgb_image( imgOverlayBg );
 
-    UI_LOCK();
     imgOverlayBg = fl_imgtk::drawblurred_widgetimage( grpViewer,
                                                       grpViewer->w() / 50 );
 
     boxOverlayBG->image( imgOverlayBg );
-    UI_UNLOCK();
-
     boxOverlayBG->redraw();
 
     if( grpOverlay->visible_r() > 0 )
     {
         grpOverlay->redraw();
     }
+    UI_UNLOCK();
 
     if ( sclMp3List != NULL )
     {
@@ -928,6 +936,7 @@ void wMain::updateOverlayBG()
         UI_UNLOCK();
     }
 
+    mainWindow->unlock();
     uobgmutexd = false;
 }
 
@@ -956,6 +965,7 @@ void wMain::setNoArtCover()
                                           0xCCCCCC00, 0x99999900, true );
 
     UI_LOCK();
+    mainWindow->lock();
     mainWindow->color( 0xCCCCCC00 );
     mainWindow->bgimage( imgWinBG, FL_ALIGN_CENTER );
 
@@ -984,10 +994,7 @@ void wMain::setNoArtCover()
     }
 
     boxCoverArt->image( imgNoArt );
-
-    boxCoverArt->redraw();
-    mainWindow->redraw();
-
+    mainWindow->unlock();
     UI_UNLOCK();
 
     _mp3art_loaded = false;
@@ -1000,6 +1007,8 @@ void wMain::switchPlayButton( int state )
 
     if ( btnPlayStop != NULL )
     {
+        UI_LOCK();
+
         if ( imgPlayCtrls[state] != NULL )
         {
             btnPlayStop->image( imgPlayCtrls[state] );
@@ -1014,6 +1023,8 @@ void wMain::switchPlayButton( int state )
         }
 
         btnPlayStop->redraw();
+
+        UI_UNLOCK();
     }
 }
 
@@ -1036,6 +1047,8 @@ void wMain::playControl( int action )
 {
     if ( action > 3 )
         return;
+
+    UI_LOCK();
 
     switch( action )
     {
@@ -1117,8 +1130,9 @@ void wMain::playControl( int action )
                     {
                         playedcntrl = true;
                         playControl( 1 );
-                        Sleep( 200 );
                     }
+
+                    Fl::wait( 10 );
 
                     if ( mp3queue == 0 )
                     {
@@ -1128,6 +1142,8 @@ void wMain::playControl( int action )
                     {
                         mp3queue--;
                     }
+
+                    Fl::wait( 10 );
 
                     if ( ( playedcntrl == true ) || ( _mp3controlnext == true ) )
                     {
@@ -1147,8 +1163,9 @@ void wMain::playControl( int action )
                     {
                         playedcntrl = true;
                         playControl( 1 );
-                        Sleep( 200 );
                     }
+
+                    Fl::wait( 10 );
 
                     mp3queue++;
 
@@ -1156,6 +1173,8 @@ void wMain::playControl( int action )
                     {
                         mp3queue = 0;
                     }
+
+                    Fl::wait( 10 );
 
                     if ( ( playedcntrl == true ) || ( _mp3controlnext == true ) )
                     {
@@ -1165,6 +1184,8 @@ void wMain::playControl( int action )
             }
             break;
     }
+
+    UI_UNLOCK();
 }
 
 void wMain::loadArtCover()
@@ -1224,7 +1245,9 @@ void wMain::loadArtCover()
                                                    fl_imgtk::BILINEAR );
 
         // Change background image with cover art.
+        mainWindow->lock();
         mainWindow->bgimage( NULL );
+        mainWindow->unlock();
 
         fl_imgtk::discard_user_rgb_image( imgWinBG );
 
@@ -1240,6 +1263,8 @@ void wMain::loadArtCover()
             fl_imgtk::blurredimage_ex( imgWinBG, 10 );
             fl_imgtk::brightbess_ex( imgWinBG, -80.f );
 
+            UI_LOCK();
+            mainWindow->lock();
             mainWindow->color( FL_BLACK );
             mainWindow->bgimage( imgWinBG, FL_ALIGN_CENTER );
 
@@ -1253,8 +1278,10 @@ void wMain::loadArtCover()
             btnRollUp->labelcolor( colLabelArt );
             btnVolCtrl->labelcolor( colLabelArt );
             btnListCtrl->labelcolor( colLabelArt );
-
             boxTrackNo->labelcolor( fl_darker( colLabelArt ) );
+
+            mainWindow->unlock();
+            UI_UNLOCK();
 
             if ( _mp3art_loaded == false )
             {
@@ -1268,7 +1295,11 @@ void wMain::loadArtCover()
                 }
             }
 
+            UI_LOCK();
+            mainWindow->lock();
             mainWindow->refreshcontrolbuttonsimages();
+            mainWindow->unlock();
+            UI_UNLOCK();
 
             _mp3art_loaded = true;
         }
@@ -1285,8 +1316,10 @@ void wMain::loadArtCover()
 
             delete[] amask;
 
+            UI_LOCK();
             boxCoverArt->image( img );
             boxCoverArt->redraw();
+            UI_UNLOCK();
         }
 
         fl_imgtk::discard_user_rgb_image( rsdmask );
@@ -1306,8 +1339,6 @@ void wMain::loadArtCover()
 
         setNoArtCover();
     }
-
-    mainWindow->redraw();
 }
 
 unsigned wMain::image_color_illum( Fl_RGB_Image* img )
@@ -1606,6 +1637,10 @@ void wMain::DelayedWorkCB()
         mainWindow->activate();
         btnPlayStop->do_callback();
     }
+
+    Fl::wait( 100 );
+    mainWindow->damage( 1 );
+    mainWindow->redraw();
 }
 
 void wMain::OnNewBuffer( unsigned position, unsigned nbsz, unsigned maxposition )

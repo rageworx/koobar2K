@@ -561,6 +561,9 @@ void Fl_BorderlessWindow::size_range(int minw, int minh, int maxw, int maxh)
 
 void Fl_BorderlessWindow::draw()
 {
+    if ( drawlocked == true )
+        return;
+
     fl_color( Fl_Double_Window::color() );
     fl_rectf( 0, 0, w(), h() );
 

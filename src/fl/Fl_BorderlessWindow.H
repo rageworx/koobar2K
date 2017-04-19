@@ -173,7 +173,12 @@ class Fl_BorderlessWindow : public Fl_Double_Window
             { return realshown; }
         bool maximized()
             { return maximized_wh; }
-        void sitckymaximize( bool t )   { stickymax = t; }
+        void sitckymaximize( bool t )
+            { stickymax = t; }
+        void lock()
+            { if ( drawlocked == false ) drawlocked = true; }
+        void unlock()
+            { if ( drawlocked == true ) drawlocked = false; }
 
     protected:
         int  sizegriptest( int x, int y );
@@ -207,6 +212,7 @@ class Fl_BorderlessWindow : public Fl_Double_Window
         bool    dragdropenabled;
         bool    dragdroping;
         bool    stickymax;
+        bool    drawlocked;
 
     private:
         Fl_Boxtype                  defaultboxtype;

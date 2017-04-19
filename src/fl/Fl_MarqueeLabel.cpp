@@ -70,7 +70,7 @@ void Fl_MarqueeLabel::label( const char* l )
     marquee_l = -1;
     marqueedirection = -1;
 
-    resettimer();
+    checkcondition();
 }
 
 void Fl_MarqueeLabel::resize( int x, int y, int w, int h )
@@ -130,8 +130,6 @@ void Fl_MarqueeLabel::checkcondition()
     fl_font( labelfont(), labelsize() );
     fl_measure( l, put_w, put_h );
 
-    //printf("measured : %s -> %d x %d , h() = %d\n", label(), put_w, put_h, h() );
-
     put_y = ( h() / 2 ) + ( put_h / 3 );
 
     if ( put_w > w() )
@@ -172,7 +170,8 @@ void Fl_MarqueeLabel::checkcondition()
 
         if ( ( updating == true ) && ( drawbyme == true ) )
         {
-            redraw();
+            //redraw();
+            damage( 1 );
         }
     }
 }
