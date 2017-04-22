@@ -98,7 +98,6 @@ class wMain : public AudioOutEvent
         Fl_FocusEffectButton*   btnVolCtrl;
         Fl_FocusEffectButton*   btnListCtrl;
         Fl_Group*               grpOverlay;
-        //Fl_GroupAniSwitch*      testswitch;
         Fl_Box*                 boxOverlayBG;
         Fl_NobackScroll*        sclMp3List;
         // ----

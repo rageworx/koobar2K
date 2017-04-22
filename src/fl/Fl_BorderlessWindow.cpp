@@ -601,9 +601,11 @@ void Fl_BorderlessWindow::draw()
         }
 
         drawimg->draw( putx, puty );
+
     }
 
-    Fl_Double_Window::draw();
+    //Fl_Double_Window::draw();
+    draw_children();
 
 #ifdef DEBUG_FL_BORDERWINDOW_DRAWING_REGION_CHECK
     fl_color( FL_BLUE );

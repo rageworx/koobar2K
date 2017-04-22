@@ -408,7 +408,6 @@ void wMain::createComponents()
         if ( boxCoverArt != NULL )
         {
             boxCoverArt->box( FL_NO_BOX );
-            boxCoverArt->callback( fl_w_cb, this );
         }
 
         cli_y += test_h;
@@ -735,7 +734,7 @@ void wMain::createComponents()
         mainWindow->callback_ondropfiles( fl_ddrop_cb, this );
 
         window_min_h = mainWindow->clientarea_y()
-                        + boxCoverArt->h()
+                       + boxCoverArt->h()
                        + skbProgress->h()
                        + 2;
 
@@ -912,7 +911,6 @@ void wMain::updateOverlayBG()
     uobgmutexd = true;
 
     /*
-
     Fl_RGB_Image* previmg = imgOverlayBg;
     imgOverlayBg = NULL;
 
@@ -1013,17 +1011,16 @@ void wMain::setNoArtCover()
         }
     }
 
-    Fl_RGB_Image* previmg = (Fl_RGB_Image*)boxCoverArt->image();
-
-    boxCoverArt->deimage();
+    Fl_RGB_Image* beremimg = (Fl_RGB_Image*) boxCoverArt->deimage();
     boxCoverArt->image( imgNoArt );
+
+    if ( beremimg != NULL )
+    {
+        fl_imgtk::discard_user_rgb_image( beremimg );
+    }
+
     mainWindow->unlock();
     UI_UNLOCK();
-
-    if ( previmg != NULL )
-    {
-        fl_imgtk::discard_user_rgb_image( previmg );
-    }
 
     _mp3art_loaded = false;
 }
@@ -1342,13 +1339,12 @@ void wMain::loadArtCover()
 
         if ( amasksz > 0 )
         {
-            Fl_RGB_Image* remimg = (Fl_RGB_Image*) boxCoverArt->image();
             Fl_RGB_Image* img = fl_imgtk::applyalpha(  rsdart, amask, amasksz );
 
             delete[] amask;
 
             UI_LOCK();
-            boxCoverArt->deimage();
+            Fl_RGB_Image* remimg = (Fl_RGB_Image*) boxCoverArt->deimage();
             boxCoverArt->image( img );
             boxCoverArt->redraw();
             UI_UNLOCK();
@@ -1496,6 +1492,9 @@ void wMain::WidgetCB( Fl_Widget* w )
 
     if ( w == btnListCtrl )
     {
+        if ( mp3list->Size() == 0 )
+            return;
+
         // Create List of MP3.
         if ( grpOverlay->visible_r() == 0 )
         {
