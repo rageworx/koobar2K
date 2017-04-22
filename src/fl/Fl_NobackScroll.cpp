@@ -282,6 +282,11 @@ void Fl_NobackScroll::draw()
     {
         imgbg->draw( x(), y() );
     }
+    else
+    {
+        fl_color( color() );
+        fl_rectf( x(), y(), w(), h() );
+    }
 
     fix_scrollbar_order();
 

@@ -67,7 +67,7 @@ class Fl_NobackScroll : public Fl_Group
         int scrollbar_size()                const { return(scrollbar_size_);}
         void scrollbar_size(int newSize)    { if ( newSize != scrollbar_size_ ) redraw();
                                               scrollbar_size_ = newSize; }
-        void bgimg( Fl_Image* i )           { if ( i != NULL ) imgbg = i; }
+        void bgimg( Fl_Image* i )           { imgbg = i; }
 
     private:
         int xposition_;

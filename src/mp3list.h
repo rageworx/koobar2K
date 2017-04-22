@@ -130,6 +130,7 @@ class Mp3List
         long FindPlayIndexToListIndex( unsigned idx );
 
     public:
+        void Clear();
         unsigned Size()                         { return _list.size(); }
         unsigned PlayQueue( unsigned idx )      { if ( idx < _playindex.size() )\
                                                     return _playindex[ idx ]; }

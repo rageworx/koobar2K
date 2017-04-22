@@ -33,7 +33,6 @@ Mp3List::Mp3List()
  : mpg123_result( -1 ),
    mhandle( NULL )
 {
-    //mpg123_result = mpg123wrap_init();
     mpars = mpg123_new_pars( &mpg123_result );
     mhandle = mpg123_parnew( mpars, "auto", &mpg123_result );
 
@@ -48,6 +47,11 @@ Mp3List::Mp3List()
 }
 
 Mp3List::~Mp3List()
+{
+    Clear();
+}
+
+void Mp3List::Clear()
 {
     unsigned rsz = _list.size();
 
@@ -64,9 +68,7 @@ Mp3List::~Mp3List()
 
     _playindex.clear();
 
-    //mpg123_exit();
 }
-
 
 long Mp3List::AddListDir( const char* dir )
 {
@@ -388,6 +390,15 @@ void Mp3List::ShufflePlayIndex()
         }
 
         std::random_shuffle( _playindex.begin(), _playindex.end() );
+
+#ifdef DEBUG
+        for( unsigned cnt=0; cnt<_list.size(); cnt++ )
+        {
+            printf("[%d] %d   ", cnt, _playindex[ cnt ] );
+        }
+        printf("\n");
+
+#endif // DEBUG
     }
 }
 

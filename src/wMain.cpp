@@ -720,6 +720,7 @@ void wMain::createComponents()
                                               grpOverlay->w(), grpOverlay->h());
             if ( sclMp3List != NULL )
             {
+                sclMp3List->color( FL_BLACK );
                 sclMp3List->end();
             }
 
@@ -910,33 +911,49 @@ void wMain::updateOverlayBG()
 
     uobgmutexd = true;
 
-    UI_LOCK();
-    mainWindow->lock();
+    /*
+
+    Fl_RGB_Image* previmg = imgOverlayBg;
+    imgOverlayBg = NULL;
+
+    mainWindow->damage( 1 );
+    mainWindow->redraw();
     grpViewer->damage( 1 );
     grpViewer->redraw();
 
-    fl_imgtk::discard_user_rgb_image( imgOverlayBg );
+    Fl_RGB_Image* tmpimg = fl_imgtk::drawblurred_widgetimage( mainWindow,
+                                                              mainWindow->w() / 50 );
 
-    imgOverlayBg = fl_imgtk::drawblurred_widgetimage( grpViewer,
-                                                      grpViewer->w() / 50 );
+    UI_LOCK();
+    mainWindow->lock();
 
-    boxOverlayBG->image( imgOverlayBg );
-    boxOverlayBG->redraw();
+    boxOverlayBG->deimage();
+    sclMp3List->bgimg( NULL );
+
+    if ( tmpimg != NULL )
+    {
+        imgOverlayBg = fl_imgtk::crop( tmpimg,
+                                       mainWindow->clientarea_x(),
+                                       mainWindow->clientarea_y(),
+                                       mainWindow->clientarea_w(),
+                                       mainWindow->clientarea_h() );
+
+        fl_imgtk::discard_user_rgb_image( tmpimg );
+    }
+
 
     if( grpOverlay->visible_r() > 0 )
     {
         grpOverlay->redraw();
     }
-    UI_UNLOCK();
-
-    if ( sclMp3List != NULL )
-    {
-        UI_LOCK();
-        sclMp3List->bgimg( imgOverlayBg );
-        UI_UNLOCK();
-    }
 
     mainWindow->unlock();
+    fl_imgtk::discard_user_rgb_image( previmg );
+
+    UI_UNLOCK();
+
+    */
+
     uobgmutexd = false;
 }
 
@@ -959,13 +976,16 @@ void wMain::setNoArtCover()
         }
     }
 
+    UI_LOCK();
+
+    mainWindow->lock();
+    mainWindow->bgimage( NULL );
+
     fl_imgtk::discard_user_rgb_image( imgWinBG );
 
     imgWinBG = fl_imgtk::makegradation_h( DEF_APP_DEFAULT_W, DEF_APP_DEFAULT_H,
                                           0xCCCCCC00, 0x99999900, true );
 
-    UI_LOCK();
-    mainWindow->lock();
     mainWindow->color( 0xCCCCCC00 );
     mainWindow->bgimage( imgWinBG, FL_ALIGN_CENTER );
 
@@ -993,9 +1013,17 @@ void wMain::setNoArtCover()
         }
     }
 
+    Fl_RGB_Image* previmg = (Fl_RGB_Image*)boxCoverArt->image();
+
+    boxCoverArt->deimage();
     boxCoverArt->image( imgNoArt );
     mainWindow->unlock();
     UI_UNLOCK();
+
+    if ( previmg != NULL )
+    {
+        fl_imgtk::discard_user_rgb_image( previmg );
+    }
 
     _mp3art_loaded = false;
 }
@@ -1026,6 +1054,8 @@ void wMain::switchPlayButton( int state )
 
         UI_UNLOCK();
     }
+
+    mainWindow->redraw();
 }
 
 void wMain::makePlayList( const char* refdir )
@@ -1256,12 +1286,12 @@ void wMain::loadArtCover()
 
         imgWinBG = fl_imgtk::rescale( (Fl_RGB_Image*)coverimg,
                                       maxwh, maxwh,
-                                      fl_imgtk::NONE );
+                                      fl_imgtk::BILINEAR );
 
         if ( imgWinBG != NULL )
         {
             fl_imgtk::blurredimage_ex( imgWinBG, 10 );
-            fl_imgtk::brightbess_ex( imgWinBG, -80.f );
+            fl_imgtk::brightbess_ex( imgWinBG, -50.f );
 
             UI_LOCK();
             mainWindow->lock();
@@ -1312,14 +1342,21 @@ void wMain::loadArtCover()
 
         if ( amasksz > 0 )
         {
+            Fl_RGB_Image* remimg = (Fl_RGB_Image*) boxCoverArt->image();
             Fl_RGB_Image* img = fl_imgtk::applyalpha(  rsdart, amask, amasksz );
 
             delete[] amask;
 
             UI_LOCK();
+            boxCoverArt->deimage();
             boxCoverArt->image( img );
             boxCoverArt->redraw();
             UI_UNLOCK();
+
+            if ( remimg != NULL )
+            {
+                fl_imgtk::discard_user_rgb_image( remimg );
+            }
         }
 
         fl_imgtk::discard_user_rgb_image( rsdmask );
@@ -1489,7 +1526,6 @@ void wMain::WidgetCB( Fl_Widget* w )
 
                         newbtn->align( FL_ALIGN_INSIDE | FL_ALIGN_CLIP | FL_ALIGN_RIGHT );
                         newbtn->box( FL_NO_BOX );
-                        //newbtn->color( 0x33333300 );
                         newbtn->labelcolor( 0xFFFFFF00 );
                         newbtn->labelfont( FL_FREE_FONT );
                         newbtn->labelsize( 12 );

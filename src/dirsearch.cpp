@@ -60,6 +60,10 @@ void DirSearch::dirsearch( const char* rootdir, const char* endfix )
             string fname = pDE->d_name;
             string fext;
 
+            #ifdef DEBUG
+            printf("%s\n", pDE->d_name);
+            #endif // DEBUG
+
             struppers( fname );
 
             if ( endfix != NULL )

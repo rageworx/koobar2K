@@ -124,6 +124,11 @@ namespace fl_imgtk
     Fl_RGB_Image* filtered( Fl_RGB_Image* img, kfconfig* kfc );
     bool          filtered_ex( Fl_RGB_Image* img, kfconfig* kfc );
 
+    // edgeenhance, factor : strength of edge signal boosting.
+    //              margin : Skipping processing image pixel size of each edges
+    Fl_RGB_Image* edgeenhance( Fl_RGB_Image* img, unsigned factor = 10, unsigned margin = 4 );
+    bool          edgeenhance_ex( Fl_RGB_Image* img, unsigned factor = 10, unsigned margin = 4 );
+
     ////////////////////////////////////////////////////////////////////////////
     // Tone mapping
 
@@ -166,6 +171,19 @@ namespace fl_imgtk
                                      float gamma = 1.0f ,
                                      float exposure = 0.0f );
 
+    /***
+    ** color CLAHE, recommend to use on uncompressed images.
+    ** -------------------------------------------------------------------------
+    ***/
+    Fl_RGB_Image* CLAHE( Fl_RGB_Image* src, unsigned regionW, unsigned regionH, float cliplimit );
+    bool          CLAHE_ex( Fl_RGB_Image* src, unsigned regionW, unsigned regionH, float cliplimit );
+
+    /***
+    ** noire, makes image to American drama.
+    ** -------------------------------------------------------------------------
+    ***/
+    Fl_RGB_Image* noire( Fl_RGB_Image* src, unsigned regionW, unsigned regionH, float cliplimit, float bright );
+    bool          noire_ex( Fl_RGB_Image* src, unsigned regionW, unsigned regionH, float cliplimit, float bright );
 
     ////////////////////////////////////////////////////////////////////////////
     // More functions ...
