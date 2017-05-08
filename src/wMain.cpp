@@ -817,10 +817,8 @@ void wMain::loadTags()
         mainWindow->unlock();
         UI_UNLOCK();
 
-
         boxTitle->checkcondition();
     }
-
 }
 
 void wMain::updateTrack()
@@ -1075,7 +1073,7 @@ void wMain::playControl( int action )
     if ( action > 3 )
         return;
 
-    UI_LOCK();
+    //UI_LOCK();
 
     switch( action )
     {
@@ -1192,16 +1190,12 @@ void wMain::playControl( int action )
                         playControl( 1 );
                     }
 
-                    Fl::wait( 10 );
-
                     mp3queue++;
 
                     if( mp3queue >= mp3list->Size() )
                     {
                         mp3queue = 0;
                     }
-
-                    Fl::wait( 10 );
 
                     if ( ( playedcntrl == true ) || ( _mp3controlnext == true ) )
                     {
@@ -1212,7 +1206,7 @@ void wMain::playControl( int action )
             break;
     }
 
-    UI_UNLOCK();
+    //UI_UNLOCK();
 }
 
 void wMain::loadArtCover()
