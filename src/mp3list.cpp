@@ -277,7 +277,8 @@ long Mp3List::AddListFile( const char* fname )
 
                             // == cover art or other
                             if ( ( pic->type == 3 )  || ( pic->type == 0 ) )
-                            if ( ( imime == "image/jpeg" ) || ( imime == "image/png" ) )
+                            if ( ( imime == "image/jpg" ) || ( imime == "image/jpeg" )
+                                 || ( imime == "image/png" ) )
                             {
                                 if ( newitem->coverart() == NULL )
                                 {

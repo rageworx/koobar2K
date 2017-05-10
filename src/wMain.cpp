@@ -1236,7 +1236,7 @@ void wMain::loadArtCover()
     Fl_PNG_Image* amaskimg = new Fl_PNG_Image( "artmask", artmask, artmasksz );
     Fl_Image* coverimg = NULL;
 
-    if ( imgmime == "image/jpeg" )
+    if ( ( imgmime == "image/jpeg" ) || ( imgmime == "image/jpg" ) )
     {
         coverimg = (Fl_Image*)new Fl_JPEG_Image( "coverart_jpg", (uchar*)img );
     }
